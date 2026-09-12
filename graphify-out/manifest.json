@@ -1,0 +1,302 @@
+{
+  "dev/repackage_data_reference.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.903122,
+    "ast_hash": "3246b1397123db7387c152adc43c7c6d",
+    "semantic_hash": "3246b1397123db7387c152adc43c7c6d"
+  },
+  "nanochat/__init__.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031236,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "nanochat/checkpoint_manager.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031248,
+    "ast_hash": "f631ae8794f4eda010e89b76ea472a76",
+    "semantic_hash": "f631ae8794f4eda010e89b76ea472a76"
+  },
+  "nanochat/common.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031253,
+    "ast_hash": "c5bb05b97397c83e6f31a6175986234b",
+    "semantic_hash": "c5bb05b97397c83e6f31a6175986234b"
+  },
+  "nanochat/core_eval.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.903126,
+    "ast_hash": "ff7d0ca01500045040cc9daed9dfd9b7",
+    "semantic_hash": "ff7d0ca01500045040cc9daed9dfd9b7"
+  },
+  "nanochat/dataloader.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031265,
+    "ast_hash": "bb87bf50bf5dcdbab67e7e67fb50b3e8",
+    "semantic_hash": "bb87bf50bf5dcdbab67e7e67fb50b3e8"
+  },
+  "nanochat/dataset.py": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031272,
+    "ast_hash": "b40c3a653f3b32c4fd414ff530251d2e",
+    "semantic_hash": "b40c3a653f3b32c4fd414ff530251d2e"
+  },
+  "nanochat/engine.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031334,
+    "ast_hash": "d08614b79eb2ca5befc006020d54e0bb",
+    "semantic_hash": "d08614b79eb2ca5befc006020d54e0bb"
+  },
+  "nanochat/execution.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031348,
+    "ast_hash": "d1dfb720c921c3256c8c94dc424d2faa",
+    "semantic_hash": "d1dfb720c921c3256c8c94dc424d2faa"
+  },
+  "nanochat/flash_attention.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031353,
+    "ast_hash": "de86891e265b25f222148de336bdbb75",
+    "semantic_hash": "de86891e265b25f222148de336bdbb75"
+  },
+  "nanochat/fp8.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031358,
+    "ast_hash": "fb400efb65e826d7add06bca38017bda",
+    "semantic_hash": "fb400efb65e826d7add06bca38017bda"
+  },
+  "nanochat/gpt.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031365,
+    "ast_hash": "8fa5b56caebf4286667a1ccbd57b7ac0",
+    "semantic_hash": "8fa5b56caebf4286667a1ccbd57b7ac0"
+  },
+  "nanochat/loss_eval.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.903137,
+    "ast_hash": "63aa7eb604c73dd5b436463ac2941b04",
+    "semantic_hash": "63aa7eb604c73dd5b436463ac2941b04"
+  },
+  "nanochat/optim.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031374,
+    "ast_hash": "a7e0981a337be06b09910e93f1b9f68c",
+    "semantic_hash": "a7e0981a337be06b09910e93f1b9f68c"
+  },
+  "nanochat/tokenizer.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031377,
+    "ast_hash": "ff162c81b352ce27b5d1bea588c6ecb6",
+    "semantic_hash": "ff162c81b352ce27b5d1bea588c6ecb6"
+  },
+  "pyproject.toml": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031384,
+    "ast_hash": "1231ff7377469ca0647a9a95b9bf8dba",
+    "semantic_hash": "1231ff7377469ca0647a9a95b9bf8dba"
+  },
+  "runs/miniseries.sh": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031389,
+    "ast_hash": "3a61fcdb4c10f2f1b522e0b9d12298df",
+    "semantic_hash": "3a61fcdb4c10f2f1b522e0b9d12298df"
+  },
+  "runs/runcpu.sh": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031394,
+    "ast_hash": "bbdad155f1629000690129bd432e61f9",
+    "semantic_hash": "bbdad155f1629000690129bd432e61f9"
+  },
+  "runs/scaling_laws.sh": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031398,
+    "ast_hash": "798b7c8cac7b69c2b8495c834a102fae",
+    "semantic_hash": "798b7c8cac7b69c2b8495c834a102fae"
+  },
+  "runs/speedrun.sh": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031403,
+    "ast_hash": "06d5c5925f179998f04650899d180eb8",
+    "semantic_hash": "06d5c5925f179998f04650899d180eb8"
+  },
+  "scripts/base_eval.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031405,
+    "ast_hash": "e449b561181188f7348cda98734eea62",
+    "semantic_hash": "e449b561181188f7348cda98734eea62"
+  },
+  "scripts/base_train.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.903141,
+    "ast_hash": "eb2a16a8a93ca7ae3defbd25a0b6ac2a",
+    "semantic_hash": "eb2a16a8a93ca7ae3defbd25a0b6ac2a"
+  },
+  "scripts/chat_cli.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.903142,
+    "ast_hash": "b4a8bc77a2eacf976fc7482cd1e0e948",
+    "semantic_hash": "b4a8bc77a2eacf976fc7482cd1e0e948"
+  },
+  "scripts/chat_eval.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031425,
+    "ast_hash": "e6d8389786703bb5338668dff5cd74f4",
+    "semantic_hash": "e6d8389786703bb5338668dff5cd74f4"
+  },
+  "scripts/chat_rl.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031427,
+    "ast_hash": "a93afccb846ef3a6d85e9523e6ae052b",
+    "semantic_hash": "a93afccb846ef3a6d85e9523e6ae052b"
+  },
+  "scripts/chat_sft.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031432,
+    "ast_hash": "0a36581b20e45a668a50ae88a376188a",
+    "semantic_hash": "0a36581b20e45a668a50ae88a376188a"
+  },
+  "scripts/infer_bench.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031436,
+    "ast_hash": "8e7dfc357f36e9e8420973154a36384e",
+    "semantic_hash": "8e7dfc357f36e9e8420973154a36384e"
+  },
+  "scripts/tok_eval.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031441,
+    "ast_hash": "a26d155eb1af3a7141cd545c15344d6f",
+    "semantic_hash": "a26d155eb1af3a7141cd545c15344d6f"
+  },
+  "scripts/tok_train.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031444,
+    "ast_hash": "899b28f70a361242f387e1589652d208",
+    "semantic_hash": "899b28f70a361242f387e1589652d208"
+  },
+  "tasks/arc.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.903145,
+    "ast_hash": "d8d4101c5856bea3da514d3abb68a7a3",
+    "semantic_hash": "d8d4101c5856bea3da514d3abb68a7a3"
+  },
+  "tasks/common.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031456,
+    "ast_hash": "9c76d5f0320f3b9073cb030cfb4e4f7a",
+    "semantic_hash": "9c76d5f0320f3b9073cb030cfb4e4f7a"
+  },
+  "tasks/gsm8k.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.903146,
+    "ast_hash": "fcc61c84211c6bae52a9841f86cca00f",
+    "semantic_hash": "fcc61c84211c6bae52a9841f86cca00f"
+  },
+  "tasks/humaneval.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031465,
+    "ast_hash": "244f349d73e44124efb8decf2146def2",
+    "semantic_hash": "244f349d73e44124efb8decf2146def2"
+  },
+  "tasks/mmlu.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.903147,
+    "ast_hash": "cae089643b2388cb7ec5eed00665926f",
+    "semantic_hash": "cae089643b2388cb7ec5eed00665926f"
+  },
+  "tasks/smoltalk.py": {
+    "mtime": 1789109023.8461487,
+    "seen": 1789195097.9031475,
+    "ast_hash": "ef7e9b3c2cf41d4888d0e4dff865b02f",
+    "semantic_hash": "ef7e9b3c2cf41d4888d0e4dff865b02f"
+  },
+  "tests/test_attention_fallback.py": {
+    "mtime": 1789109023.8501673,
+    "seen": 1789195097.903148,
+    "ast_hash": "c7d9b416cbac3143db52c85e4a125f85",
+    "semantic_hash": "c7d9b416cbac3143db52c85e4a125f85"
+  },
+  "tests/test_engine.py": {
+    "mtime": 1789109023.8501673,
+    "seen": 1789195097.9031487,
+    "ast_hash": "c6de22d833622ba0221d18723e6554f3",
+    "semantic_hash": "c6de22d833622ba0221d18723e6554f3"
+  },
+  "tests/test_execution.py": {
+    "mtime": 1789109023.8501673,
+    "seen": 1789195097.903149,
+    "ast_hash": "d84dfbdaa33b30a8e05169ea4e639bd5",
+    "semantic_hash": "d84dfbdaa33b30a8e05169ea4e639bd5"
+  },
+  "tests/test_optim.py": {
+    "mtime": 1789109023.8501673,
+    "seen": 1789195097.9031494,
+    "ast_hash": "5ae763587faf2df07a7d558ff8770157",
+    "semantic_hash": "5ae763587faf2df07a7d558ff8770157"
+  },
+  "tests/test_tasks.py": {
+    "mtime": 1789109023.8501673,
+    "seen": 1789195097.9031498,
+    "ast_hash": "3f443d213fa8db25131373340fe7a88e",
+    "semantic_hash": "3f443d213fa8db25131373340fe7a88e"
+  },
+  "tests/test_tokenizer.py": {
+    "mtime": 1789109023.8501673,
+    "seen": 1789195097.90315,
+    "ast_hash": "a654b18d72241fe3d4432ab89d26e906",
+    "semantic_hash": "a654b18d72241fe3d4432ab89d26e906"
+  },
+  ".claude/skills/read-arxiv-paper/SKILL.md": {
+    "mtime": 1789109023.8381114,
+    "seen": 1789195097.9031506,
+    "ast_hash": "038542f6a83eae62072beb642cd5ce46",
+    "semantic_hash": "038542f6a83eae62072beb642cd5ce46"
+  },
+  "README.md": {
+    "mtime": 1789109023.8381114,
+    "seen": 1789195097.9031525,
+    "ast_hash": "608f14cc9fb2e96de0028f9d3aa724bd",
+    "semantic_hash": "608f14cc9fb2e96de0028f9d3aa724bd"
+  },
+  "dev/LEADERBOARD.md": {
+    "mtime": 1789109023.8381114,
+    "seen": 1789195097.9031527,
+    "ast_hash": "1f5e53096ff4065619a4b05860bfc14b",
+    "semantic_hash": "1f5e53096ff4065619a4b05860bfc14b"
+  },
+  "dev/LOG.md": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031532,
+    "ast_hash": "06e69326a1f577bdcfb752ec2e29cc0e",
+    "semantic_hash": "06e69326a1f577bdcfb752ec2e29cc0e"
+  },
+  "dev/nanochat.png": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031537,
+    "ast_hash": "8d3febb3e9abb2fe7c85d2914a26a211",
+    "semantic_hash": "8d3febb3e9abb2fe7c85d2914a26a211"
+  },
+  "dev/scaling_laws_jan26.png": {
+    "mtime": 1789109023.8421302,
+    "seen": 1789195097.9031541,
+    "ast_hash": "c48097ed0b3d4d2df1f4203c0f2d3e4d",
+    "semantic_hash": "c48097ed0b3d4d2df1f4203c0f2d3e4d"
+  },
+  ".agents/AGENTS.md": {
+    "mtime": 1789195249.8136342,
+    "seen": 1789195713.5164957,
+    "ast_hash": "836d27edc5978702ab70ece77b7cfdb7",
+    "semantic_hash": "836d27edc5978702ab70ece77b7cfdb7"
+  },
+  ".agents/README.md": {
+    "mtime": 1789195249.9137664,
+    "seen": 1789195713.5164967,
+    "ast_hash": "d4ac2d23ae732b71107fdbb97b5b5d1f",
+    "semantic_hash": "d4ac2d23ae732b71107fdbb97b5b5d1f"
+  },
+  "nanochat\u9879\u76ee\u8be6\u7ec6\u9605\u8bfb\u4e0e\u5b9e\u6218\u6307\u5357.md": {
+    "mtime": 1789194726.818069,
+    "seen": 1789195713.5165014,
+    "ast_hash": "ee4b05e6da2970391cb9a5af159bb05f",
+    "semantic_hash": "ee4b05e6da2970391cb9a5af159bb05f"
+  }
+}
