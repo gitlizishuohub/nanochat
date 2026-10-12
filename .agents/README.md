@@ -1,8 +1,14 @@
-# `.agents` 目录地图
+# Agent 目录地图
 
-| 路径 | 用途 |
+项目规范入口：[根 AGENTS.md](../AGENTS.md)。
+
+| 位置 | 用途 |
 |---|---|
-| `AGENTS.md` | 项目级常驻规则、记忆协议与技能注册表 |
-| `skills/` | 项目基线技能符号链接及仓库特异技能 |
+| [project_rules/workflow.md](project_rules/workflow.md) | 工作与验证流程 |
+| [project_rules/memory.md](project_rules/memory.md) | 跨会话记忆闭环 |
+| [project_rules/skills.md](project_rules/skills.md) | 技能挂载与触发条件 |
+| [docs/README.md](docs/README.md) | 项目知识文档导航及既有交付位置例外 |
+| [memory/MEMORY.md](memory/MEMORY.md) | 记忆索引，与 Agent 内容一起提交 |
+| `skills/` | 公用技能挂载及仓库特异技能 |
 
-当前六个基线技能均以符号链接挂载到 `init-project` 技能集的唯一真源，没有复制技能本体。
+根规范与细则按任务路由使用，不要求每次全量读取。临时产物使用操作系统临时目录。
