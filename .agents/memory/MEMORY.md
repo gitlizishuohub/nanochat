@@ -8,6 +8,8 @@
 
 ## project
 
+- [llm-training-docs](llm-training-docs.md) — LLM 训练流程与术语文档的拆分栏目、根目录入口和核对日期。
+
 - [protected-agent-paths](protected-agent-paths.md) — 更新项目 Agent 配置遇到只读或跨设备错误时，核查当前沙盒路径权限。
 
 ## reference

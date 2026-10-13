@@ -1,0 +1,19 @@
+---
+name: llm-training-docs
+description: 查找 LLM 训练流程与术语文档或维护其拆分栏目时读取。
+type: project
+created: 2026-10-13
+updated: 2026-10-13
+---
+
+# LLM 训练文档位置
+
+事实或决策：用户要求将过大的《LLM模型训练完整流程与术语对照.md》在 docs 中新开栏目拆分。正文现位于 `.agents/docs/llm-training-workflow/`，根目录同名文件保留为简短导航入口。
+
+Why: 原文约 196 KB，术语表占约 85 KB；按章节及六类术语拆分，方便阅读与局部维护。
+
+How to apply: 从栏目 README 查找章节；更新内容时维护正文到术语及术语到正文的跨文件锚点链接。源码依据仍为原文的 2026-10-12 核对记录，拆分不代表新的源码或运行验收。
+
+Evidence: 用户在 2026-10-13 明确要求“文件过大，在docs中新开栏目拆封”；结果见 [栏目目录](../docs/llm-training-workflow/README.md) 及根目录同名入口。
+
+Invalidates: 用户调整文档位置、章节结构或重新核验源码时更新本条；源码变化后不得沿用原核对结果作为当前结论。
