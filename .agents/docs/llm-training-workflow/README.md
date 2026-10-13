@@ -10,29 +10,29 @@
 
 | 章节 | 内容 |
 | --- | --- |
-| 1 | [源码依据与调用关系](01-源码依据与调用关系.md) |
-| 2 | [必需主线与实际可选分支](02-训练主线与可选分支.md) |
-| 3 | [环境与数据准备](03-环境与数据准备.md) |
-| 4 | [tokenizer 与对话协议](04-tokenizer与对话协议.md) |
-| 5 | [模型构建、默认配置、随机初始化和加载](05-模型构建与权重加载.md) |
-| 6 | [编码、截断、padding、labels、batch 与分布式数据](06-数据编码与批量组织.md) |
-| 7 | [内部前向、模块作用、张量与预测损失](07-模型前向与预测损失.md) |
-| 8 | [反向、混合精度、累积、优化器和学习率](08-反向传播与参数更新.md) |
-| 9 | [日志、权重保存、checkpoint与断点恢复](09-日志保存与断点恢复.md) |
-| 10 | [可选GSM8K强化学习](10-GSM8K强化学习.md) |
-| 11 | [验证、评估、生成与交付](11-评估生成与交付.md) |
-| 13 | [交付检查与未验证部分](13-原文检查记录与未验证部分.md) |
+| 1 | [源码依据与调用关系](01-source-references-and-call-flow.md) |
+| 2 | [必需主线与实际可选分支](02-training-pipeline-and-optional-branches.md) |
+| 3 | [环境与数据准备](03-environment-and-data-preparation.md) |
+| 4 | [tokenizer 与对话协议](04-tokenizer-and-conversation-protocol.md) |
+| 5 | [模型构建、默认配置、随机初始化和加载](05-model-construction-and-weight-loading.md) |
+| 6 | [编码、截断、padding、labels、batch 与分布式数据](06-data-encoding-and-batching.md) |
+| 7 | [内部前向、模块作用、张量与预测损失](07-forward-pass-and-prediction-loss.md) |
+| 8 | [反向、混合精度、累积、优化器和学习率](08-backpropagation-and-parameter-updates.md) |
+| 9 | [日志、权重保存、checkpoint与断点恢复](09-logging-checkpoints-and-resume.md) |
+| 10 | [可选GSM8K强化学习](10-gsm8k-reinforcement-learning.md) |
+| 11 | [验证、评估、生成与交付](11-evaluation-generation-and-delivery.md) |
+| 13 | [交付检查与未验证部分](13-original-validation-and-limitations.md) |
 
 ## 术语对照
 
-[术语表说明](12-术语表导航.md)
+[术语表说明](12-glossary-index.md)
 
-- [12.1 训练阶段与实现边界](12-1-训练阶段与实现边界.md)
-- [12.2 数据与对话协议](12-2-数据与对话协议.md)
-- [12.3 批量与分布式](12-3-批量与分布式.md)
-- [12.4 构建与模型前向](12-4-构建与模型前向.md)
-- [12.5 损失与参数更新](12-5-损失与参数更新.md)
-- [12.6 保存、评估与交付](12-6-保存、评估与交付.md)
+- [12.1 训练阶段与实现边界](12-1-training-stages-and-implementation-boundaries.md)
+- [12.2 数据与对话协议](12-2-data-and-conversation-protocol.md)
+- [12.3 批量与分布式](12-3-batching-and-distributed-training.md)
+- [12.4 构建与模型前向](12-4-model-construction-and-forward-pass.md)
+- [12.5 损失与参数更新](12-5-loss-and-parameter-updates.md)
+- [12.6 保存、评估与交付](12-6-checkpoints-evaluation-and-delivery.md)
 
 ## 阅读说明
 
