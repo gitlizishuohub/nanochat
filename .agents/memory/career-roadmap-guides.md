@@ -14,6 +14,8 @@ updated: 2026-10-15
 
 已验证环境：`/home/lizishuo/miniconda3/envs/nanochat/bin/python` 为 Python 3.10.20，PyTorch 2.9.1+cpu；CPU FP32 / SDPA，无 CUDA。2026-10-15 推理相关测试 13 passed / 10 skipped，依赖兼容性检查通过。安装及复查命令见 `.agents/docs/project-maintenance/nanochat-conda-environment-2026-10-15.md`。这些结果不代表真实 checkpoint、训练或 GPU 性能已经验收。
 
+已完成交付：`w1/`、`w2/`、`w3/` 共 21 篇教程、13 个脚本，完成 CPU 随机模型/cache、tokenizer/loader、重复基准及跨周统计接口验证。验收范围与未测条件见 `.agents/docs/project-maintenance/career-roadmap-guides-validation-2026-10-15.md`。后续从 W1 第一天实际执行，保留真实实验日志；真实训练和 GPU 性能仍待执行，不按原日历倒填完成状态。
+
 Why: 用户要求每天可以手把手操作，明确纠正了额外 README 中转层；脚本应作为实际交付文件，而非只提供代码片段。
 
 How to apply: 维护 `w1/`、`w2/`、`w3/` 时按学习依赖编号，每天完整解释前置、步骤、失败分流和产物。指导与脚本留在周目录，实际执行产生的正式成果放在 `experiments/inference_infra/`；原日历不表示对应任务已经完成。脚本验证与真实模型/GPU 实测分别报告。
