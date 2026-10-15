@@ -6,6 +6,8 @@
 
 ## feedback
 
+- [career-roadmap-guides](career-roadmap-guides.md) — W1–W3 每日教程采用正文直链每周 scripts，不增加周 README。
+
 ## project
 
 - [llm-training-docs](llm-training-docs.md) — LLM 训练流程与术语文档的拆分栏目、根目录入口和核对日期。
