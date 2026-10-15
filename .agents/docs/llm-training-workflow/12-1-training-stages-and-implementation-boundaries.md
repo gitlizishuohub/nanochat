@@ -37,11 +37,11 @@ source_symbols:
   - Engine.generate_batch
 ---
 
-[栏目目录](README.md) · [上一篇](12-glossary-index.md) · [下一篇](12-2-data-and-conversation-protocol.md)
+[栏目目录](README.md) · [上一篇](12-0-glossary-index.md) · [下一篇](12-2-data-and-conversation-protocol.md)
 
 > 拆分自原文；源码核对日期为 2026-10-12。本次仅整理文档结构，未重新核验源码或运行训练。
 
-### 12.1 训练阶段与实现边界
+# 12.1 训练阶段与实现边界
 
 | 英文或缩写 | 中文名称 | 详细解释 | 项目对应文件或符号 | 返回正文链接 |
 | --- | --- | --- | --- | --- |
