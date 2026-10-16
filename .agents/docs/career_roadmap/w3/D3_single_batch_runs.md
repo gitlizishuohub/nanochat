@@ -14,7 +14,7 @@ knowledge_scope: W3第3日实操与验收
 
 # W3 D3 · 单样本基线与无 GPU 分流
 
-[上一日](D2.md) · [下一日](D4.md)。
+[上一日](D2_baseline_matrix.md) · [下一日](D4_batch_runs.md)。
 
 ## 开始前：固定终端和记录方式
 

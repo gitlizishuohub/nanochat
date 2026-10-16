@@ -14,7 +14,7 @@ knowledge_scope: W3第4日实操与验收
 
 # W3 D4 · 批量生成与失败记录
 
-[上一日](D3.md) · [下一日](D5.md)。
+[上一日](D3_single_batch_runs.md) · [下一日](D5_statistics_audit.md)。
 
 ## 开始前：固定终端和记录方式
 

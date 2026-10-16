@@ -18,7 +18,7 @@ knowledge_scope: W2第2天实操与验收
 
 # W2 D2：逐项验证文本、token 与训练批次
 
-前一天：[返回前一天](D1.md)；后一天：[继续下一天](D3.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+前一天：[返回前一天](D1_data_prerequisites.md)；后一天：[继续下一天](D3_training_smoke.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
 ## 开始前：固定 shell 与结果位置
 
@@ -36,7 +36,7 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 
 ## 今日目标与时间盒
 
-用 20 分钟准备数据，25 分钟做可逆编码检查，20 分钟检查训练批次，15 分钟记录。完成标志是有实际断言输出，或有明确错误与恢复方法。先读 [昨天的数据盘点](D1.md)，确认你选择 existing 还是 isolated-synthetic。
+用 20 分钟准备数据，25 分钟做可逆编码检查，20 分钟检查训练批次，15 分钟记录。完成标志是有实际断言输出，或有明确错误与恢复方法。先读 [昨天的数据盘点](D1_data_prerequisites.md)，确认你选择 existing 还是 isolated-synthetic。
 
 ## 第一步：没有数据时，创建独立的 smoke 数据
 

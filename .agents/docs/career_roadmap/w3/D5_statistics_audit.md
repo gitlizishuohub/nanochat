@@ -14,7 +14,7 @@ knowledge_scope: W3第5日实操与验收
 
 # W3 D5 · 逐行审计和统计复算
 
-[上一日](D4.md) · [下一日](D6.md)。
+[上一日](D4_batch_runs.md) · [下一日](D6_reproduction_entry.md)。
 
 ## 开始前：固定终端和记录方式
 

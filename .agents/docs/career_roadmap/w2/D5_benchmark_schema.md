@@ -18,7 +18,7 @@ knowledge_scope: W2第5天实操与验收
 
 # W2 D5：冻结原始数据协议和统计边界
 
-前一天：[返回前一天](D4.md)；后一天：[继续下一天](D6.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+前一天：[返回前一天](D4_checkpoint_generation.md)；后一天：[继续下一天](D6_repeated_benchmark.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
 ## 开始前：固定 shell 与结果位置
 
@@ -36,7 +36,7 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 
 ## 今日目标与时间盒
 
-今天用 20 分钟读测量边界、25 分钟写协议、20 分钟核对 schema、15 分钟用错误分支验证落盘。前置是 [模型身份记录](D4.md)。即便没有 checkpoint，协议设计和错误行检查仍能完成。
+今天用 20 分钟读测量边界、25 分钟写协议、20 分钟核对 schema、15 分钟用错误分支验证落盘。前置是 [模型身份记录](D4_checkpoint_generation.md)。即便没有 checkpoint，协议设计和错误行检查仍能完成。
 
 ## 第一步：先定义被测服务与计时范围
 

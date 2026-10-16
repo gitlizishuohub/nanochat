@@ -14,7 +14,7 @@ knowledge_scope: W3第6日实操与验收
 
 # W3 D6 · 写出他人能执行的复现入口
 
-[上一日](D5.md) · [下一日](D7.md)。
+[上一日](D5_statistics_audit.md) · [下一日](D7_project_briefing.md)。
 
 ## 开始前：固定终端和记录方式
 

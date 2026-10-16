@@ -18,7 +18,7 @@ knowledge_scope: W2第6天实操与验收
 
 # W2 D6：运行三次预热、五次正式测量
 
-前一天：[返回前一天](D5.md)；后一天：[继续下一天](D7.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+前一天：[返回前一天](D5_benchmark_schema.md)；后一天：[继续下一天](D7_matrix_smoke.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
 ## 开始前：固定 shell 与结果位置
 
@@ -36,7 +36,7 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 
 ## 今日目标与时间盒
 
-用 15 分钟审查脚本、20 分钟 CPU 契约试跑、20 分钟真实checkpoint试跑（具备资源才做）、20 分钟自动汇总。前置是 [原始数据协议](D5.md)。今天的核心是重复与自动统计，不是比较某次最快耗时。
+用 15 分钟审查脚本、20 分钟 CPU 契约试跑、20 分钟真实checkpoint试跑（具备资源才做）、20 分钟自动汇总。前置是 [原始数据协议](D5_benchmark_schema.md)。今天的核心是重复与自动统计，不是比较某次最快耗时。
 
 ## 第一步：检查入口与保存路径
 
@@ -84,7 +84,7 @@ python .agents/docs/career_roadmap/w3/scripts/aggregate.py --help
 python .agents/docs/career_roadmap/w3/scripts/aggregate.py --raw-dir experiments/inference_infra/results/raw --output experiments/inference_infra/results/summary/w2_baseline.csv --audit experiments/inference_infra/results/summary/w2_audit.jsonl
 ```
 
-然后按 [W3统计复核教程](../w3/D5.md) 的命令生成CSV。要求把 `model_kind/device/precision/attention_backend/P/G/B/tag/step` 不同的行分开；不同session和checkpoint hash也不能无判断合并。median是正式run的中位数；<abbr title="P95 / 95th percentile · 95%样本不超过的分位值。本文汇总采用nearest-rank：排序后取ceil(0.95N)对应样本，N=5时等于最大值；不能据此断言尾延迟稳定。">P95</abbr> 在仅五个样本时信息很有限，因此同时报告样本数、最小/最大值。
+然后按 [W3统计复核教程](../w3/D5_statistics_audit.md) 的命令生成CSV。要求把 `model_kind/device/precision/attention_backend/P/G/B/tag/step` 不同的行分开；不同session和checkpoint hash也不能无判断合并。median是正式run的中位数；<abbr title="P95 / 95th percentile · 95%样本不超过的分位值。本文汇总采用nearest-rank：排序后取ceil(0.95N)对应样本，N=5时等于最大值；不能据此断言尾延迟稳定。">P95</abbr> 在仅五个样本时信息很有限，因此同时报告样本数、最小/最大值。
 
 ## 常见失败、产物与验收
 

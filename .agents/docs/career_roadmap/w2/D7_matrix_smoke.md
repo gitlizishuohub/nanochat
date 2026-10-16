@@ -18,7 +18,7 @@ knowledge_scope: W2第7天实操与验收
 
 # W2 D7：小矩阵试跑与 W2 验收
 
-前一天：[返回前一天](D6.md)；后一天：[W3第一天](../w3/D1.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+前一天：[返回前一天](D6_repeated_benchmark.md)；后一天：[W3第一天](../w3/D1_resume_draft.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
 ## 开始前：固定 shell 与结果位置
 
@@ -36,7 +36,7 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 
 ## 今日目标与时间盒
 
-用 15 分钟检查门槛，30–60 分钟跑小矩阵，20 分钟复算，15 分钟写周结。前置是 [重复测量](D6.md)；如果仍有错误，先修复最小P8/G4/B1，不直接加大矩阵。
+用 15 分钟检查门槛，30–60 分钟跑小矩阵，20 分钟复算，15 分钟写周结。前置是 [重复测量](D6_repeated_benchmark.md)；如果仍有错误，先修复最小P8/G4/B1，不直接加大矩阵。
 
 ## 第一步：给今天设置清晰的可完成门槛
 
@@ -57,7 +57,7 @@ B4每个有效run应 `generated_tokens=16`、`per_row_generated_tokens=[4,4,4,4]
 
 ## 第三步：逐行复算与自动汇总
 
-打开 [W3统计脚本](../w3/scripts/aggregate.py) 与 [统计复核指导](../w3/D5.md)。先运行help确认参数，再用同一个统计入口处理这些raw。不要手抄五个TTFT到Excel后丢掉run_id。检查以下关系：
+打开 [W3统计脚本](../w3/scripts/aggregate.py) 与 [统计复核指导](../w3/D5_statistics_audit.md)。先运行help确认参数，再用同一个统计入口处理这些raw。不要手抄五个TTFT到Excel后丢掉run_id。检查以下关系：
 
 | 检查项 | 每个ok/measure应满足 |
 |---|---|
@@ -95,7 +95,7 @@ PENDING_GPU项目：
 - 多个配置在同一进程互相改变dtype：这里每条CLI是独立进程；不要用临时notebook改常量假装完成独立运行。
 - raw里只有8行但都是warmup：按phase统计，不能只数总行数。
 - 发现异常值：先保留，再记录背景进程、温度、调频与CPU线程数；只有有证据的运行污染才单独标记，不删除慢样本。
-- 最终验收：至少一条从脚本→raw→自动summary的真实链；有一页周结能明确说明未验证范围；接着阅读 [W3简历初稿](../w3/D1.md)。
+- 最终验收：至少一条从脚本→raw→自动summary的真实链；有一页周结能明确说明未验证范围；接着阅读 [W3简历初稿](../w3/D1_resume_draft.md)。
 
 ## 当天记录与离开前核对
 

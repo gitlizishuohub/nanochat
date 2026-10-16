@@ -18,7 +18,7 @@ knowledge_scope: W2第3天实操与验收
 
 # W2 D3：两步训练 smoke 与合法 checkpoint
 
-前一天：[返回前一天](D2.md)；后一天：[继续下一天](D4.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+前一天：[返回前一天](D2_token_roundtrip.md)；后一天：[继续下一天](D4_checkpoint_generation.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
 ## 开始前：固定 shell 与结果位置
 
@@ -36,7 +36,7 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 
 ## 今日目标与时间盒
 
-今天先计划、再运行两次优化步，不追求模型效果。用 15 分钟核对输入、10 分钟审查命令、30–60 分钟执行（CPU 视硬件增加）、15 分钟加载验收。前置是 [token 与批次检查](D2.md) 中真实数据断言成功。若还没成功，今天先修它。
+今天先计划、再运行两次优化步，不追求模型效果。用 15 分钟核对输入、10 分钟审查命令、30–60 分钟执行（CPU 视硬件增加）、15 分钟加载验收。前置是 [token 与批次检查](D2_token_roundtrip.md) 中真实数据断言成功。若还没成功，今天先修它。
 
 <abbr title="Smoke test · 用最小工作量检查一条真实路径是否能执行到结束。本文必须经过真实训练、保存、重新加载；两步成功不能证明收敛、质量或稳定性能。">smoke</abbr> checkpoint 必须由 nanochat 的模型、tokenizer 和保存格式共同产生。MiniMind 权重不能进入这条路径。
 

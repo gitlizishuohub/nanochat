@@ -14,7 +14,7 @@ knowledge_scope: W3第2日实操与验收
 
 # W3 D2 · 冻结 checkpoint 与基线矩阵
 
-[上一日](D1.md) · [下一日](D3.md)。
+[上一日](D1_resume_draft.md) · [下一日](D3_single_batch_runs.md)。
 
 ## 开始前：固定终端和记录方式
 

@@ -14,7 +14,7 @@ knowledge_scope: W3第1日实操与验收
 
 # W3 D1 · 证据驱动的一页简历初稿
 
-[原总计划](../nanochat_daily_execution_2026-10-01.md) · [下一日](D2.md)。
+[原总计划](../nanochat_daily_execution_2026-10-01.md) · [下一日](D2_baseline_matrix.md)。
 
 ## 开始前：固定终端和记录方式
 

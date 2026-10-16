@@ -120,4 +120,4 @@ mkdir -p experiments/inference_infra/reports
 
 在报告末尾留当天记录：`实际日期 / commit / 真实用时 / 执行命令 / JSON 路径 / PASS、PARTIAL 或 BLOCKED / 下一步`。PARTIAL 表示完成了部分可核验工作，不是全面通过。
 
-下一篇：[D2 环境盘点](D2.md)。原路线：[逐日总计划](../nanochat_daily_execution_2026-10-01.md)。
+下一篇：[D2 环境盘点](D2_environment_inventory.md)。原路线：[逐日总计划](../nanochat_daily_execution_2026-10-01.md)。

@@ -18,7 +18,7 @@ knowledge_scope: W1 D6 注意力后端条件与CPU覆盖边界
 
 今天要回答“实际用的是哪个后端，为什么”，而不是只看到文件名里有 Flash Attention 就认定正在调用 GPU 内核。预计 60–90 分钟：20 分钟路由，20 分钟掩码，15 分钟定向测试，20 分钟后端条件表，10 分钟口述。
 
-前置：[D5 缓存生命周期](D5.md)。不用下载内核；CPU 只验证 SDPA 与相关契约，FA3 留待 GPU 条件齐备。
+前置：[D5 缓存生命周期](D5_cache_lifecycle.md)。不用下载内核；CPU 只验证 SDPA 与相关契约，FA3 留待 GPU 条件齐备。
 
 ## 1. 按源码分开“可加载”与“最终使用”
 
@@ -107,4 +107,4 @@ rg -n 'class TestSDPAOnly|class TestOverrideMechanism|def test_|skipif' tests/te
 
 当天验收：能解释 HAS/USE；手算 chunk mask；指出 `Tq=1` 的 `W+1`；报告明确 CPU 已覆盖与 GPU 未覆盖。追加真实日期、commit、用时、命令、日志、状态及下一步。
 
-上一篇：[D5 缓存生命周期](D5.md)。下一篇：[D7 基准审计](D7.md)。
+上一篇：[D5 缓存生命周期](D5_cache_lifecycle.md)。下一篇：[D7 基准审计](D7_benchmark_audit.md)。
