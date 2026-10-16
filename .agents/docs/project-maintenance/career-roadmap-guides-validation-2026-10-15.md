@@ -13,9 +13,9 @@ doc_type: reference
 
 交付为 21 篇每日教程和 13 个 Python 脚本：W1 为 7+4，W2 为 7+6，W3 为 7+3。三个周目录不设 README；指导在实际操作处直接链接脚本。按文件名排序阅读，周末与次周之间有直接链接：
 
-- [W1 第一天：起点复核](../career_roadmap/w1/01_2026-10-01_starting_point.md)。
-- [W2 第一天：数据前置条件](../career_roadmap/w2/01_2026-10-08_data_prerequisites.md)。
-- [W3 第一天：简历初稿](../career_roadmap/w3/01_2026-10-15_resume_draft.md)。
+- [W1 第一天：起点复核](../career_roadmap/w1/D1.md)。
+- [W2 第一天：数据前置条件](../career_roadmap/w2/D1.md)。
+- [W3 第一天：简历初稿](../career_roadmap/w3/D1.md)。
 
 教程包含前置条件、操作命令、源码位置、结果解读、失败分流、产物模板与每日验收。实验正式输出仍由读者执行后写入 `experiments/inference_infra/`；本轮脚本验证输出放在 `/tmp`，不冒充按日完成的正式实验。
 

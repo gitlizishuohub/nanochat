@@ -3,12 +3,14 @@ name: career-roadmap-guides
 description: 维护 nanochat W1–W3 每日教程及配套实验脚本时召回目录和阅读方式约定。
 type: feedback
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # W1–W3 教程组织约定
 
 用户决定：将 `.agents/docs/career_roadmap/nanochat_daily_execution_2026-10-01.md` 的 W1–W3 展开为三个周目录内的详细每日指导；每周实验脚本放在该周 `scripts/`。不增加周 README，指导正文在实际操作位置直接用相对链接指向脚本，并说明运行方式、结果解释和验收。
+
+命名约定：W1–W3 各周每日教程仅用 `D1.md` 至 `D7.md` 命名，标题使用 `Wn Dn`，不绑定具体日历日期；维护时同步更新前后日与跨周链接。此约定来自用户 2026-10-16 对截图中文件命名的明确纠正“取消具体日期命名，仅保留D1，D2”。历史验证日期和总计划原文件名保留。
 
 环境选择：用户在同一任务中明确要求先创建 Conda 环境，并命名为 `nanochat`。后续教程以 `conda activate nanochat` 后运行 `python` 为主；不要默认切回项目 `.venv` 或使用会另建 `.venv` 的 `uv run`。
 
