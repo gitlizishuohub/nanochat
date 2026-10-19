@@ -88,14 +88,25 @@ python .agents/docs/career_roadmap/w1/scripts/probe_model_and_cache.py --mode sh
 
 ## 5. 记录图、处理失败并验收
 
-新建 `experiments/inference_infra/reports/model_path.md`，至少包含：配置表、上面的形状链、smear/QK norm/backout 的位置、GPT.generate 伪流程、实际 JSON 链接。图可用最简形式：
+新建 `experiments/inference_infra/reports/model_path.md`，至少包含：配置表、上面的形状链、smear/QK norm/backout 的位置、GPT.generate 伪流程、实际 JSON 链接。下图采用纵向布局，节点内标注输出 shape，表示不传 targets、无缓存且 `T>1` 的 forward 路径：
 
 ```mermaid
-flowchart LR
-  IDs --> Embedding --> Norm --> Smear --> Blocks --> Backout --> FinalNorm --> Head --> Logits
+flowchart TD
+  ids["Token IDs<br/>[B, T]"]
+  embed["Embedding → compute dtype<br/>[B, T, C]"]
+  first_norm["RMSNorm<br/>[B, T, C]"]
+  smear["Smear：混入前一位置的 embedding<br/>[B, T, C]"]
+  blocks["逐层残差混合 → Attention → MLP<br/>Q/K norm 位于 Attention 内<br/>[B, T, C]"]
+  backout["Backout：减去缩放的中间层残差<br/>[B, T, C]"]
+  final_norm["末层 RMSNorm<br/>[B, T, C]"]
+  head["lm_head：投影到补齐后的词表<br/>[B, T, Vpad]"]
+  logits["裁回 V → FP32 → softcap<br/>Logits [B, T, V]"]
+
+  ids --> embed --> first_norm --> smear --> blocks
+  blocks --> backout --> final_norm --> head --> logits
 ```
 
-每个节点下面用表写 shape，避免只画箭头没有信息。不要将 hook 看到的线性层输出错标成多头布局。
+`Vpad` 表示模型为对齐而补齐后的词表大小，`V` 是实际词表大小。将上图中的符号替换为本次实验的具体尺寸；Attention 内部的 Q/K/V 布局另用第 2 节的表补充。不要将 hook 看到的线性层输出错标成多头布局。
 
 | 失败 | 检查 |
 |---|---|
