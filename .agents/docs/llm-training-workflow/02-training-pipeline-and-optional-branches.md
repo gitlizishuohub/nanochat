@@ -61,7 +61,7 @@ source_symbols:
 从上到下阅读，箭头表示数据或权重交给下一节点。实线是从零获得对话模型的参考主线，虚线是已有权重入口或按任务选择的评估出口。纵向布局控制宽度；评估出口不表示本次已执行。失败后应调整实验另行训练，代码没有自动质量门禁。
 
 ~~~mermaid
-%%{init: {'theme':'base','themeVariables':{'background':'#101827','lineColor':'#f8fafc','textColor':'#f8fafc','fontSize':'15px'},'flowchart':{'curve':'linear','nodeSpacing':24,'rankSpacing':30}}}%%
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
 flowchart TD
     A["起点：环境 + 训练与验证语料"] --> B["分词器训练：词表 + token_bytes"]
     B --> C["构建 GPT + 随机初始化"]
@@ -84,7 +84,7 @@ flowchart TD
     class C,D,F train;
     class E,G,X,I,J artifact;
     class Q,H eval;
-    linkStyle default stroke:#f8fafc,stroke-width:3px;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
 ~~~
 
 ## 2.2 实际可选训练分支图
@@ -92,7 +92,7 @@ flowchart TD
 仍从上到下读。第一图是追加任务训练，第二图是执行方式和实验规模选择，两者不能拼成必须依次通过的算法链。实线表示分支内部流向，虚线表示可选择进入；纵向分图减少拥挤。
 
 ~~~mermaid
-%%{init: {'theme':'base','themeVariables':{'lineColor':'#f8fafc','fontSize':'15px'},'flowchart':{'curve':'linear'}}}%%
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
 flowchart TD
     A["起点：SFT 权重 + 原词表"] -.-> B["可选 GSM8K RL：数学题提示"]
     B --> C["当前模型多回答采样 + 工具结果"]
@@ -107,11 +107,11 @@ flowchart TD
     class A,E,H base;
     class B,C,D train;
     class F,G eval;
-    linkStyle default stroke:#f8fafc,stroke-width:3px;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
 ~~~
 
 ~~~mermaid
-%%{init: {'theme':'base','themeVariables':{'lineColor':'#f8fafc','fontSize':'15px'},'flowchart':{'curve':'linear'}}}%%
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
 flowchart TD
     A["起点：准备好的语料与词表"] -.-> B["执行选项：常规精度 / 兼容硬件 FP8"]
     B --> C["base_train：一次基础训练"]
@@ -126,7 +126,7 @@ flowchart TD
     class A,G data;
     class B,C,D,E train;
     class F eval;
-    linkStyle default stroke:#f8fafc,stroke-width:3px;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
 ~~~
 
 [runs/miniseries.sh](/home/lizishuo/_program_/Project/nanochat/runs/miniseries.sh)、[runs/scaling_laws.sh](/home/lizishuo/_program_/Project/nanochat/runs/scaling_laws.sh) 反复调用同一 base_train，不新增训练算法。FP8 是计算加速选项，不是新阶段；<a id="ref-resume-001"></a><abbr title="Resume from Checkpoint｜断点恢复&#10;定义：读取被中断阶段保存的模型、优化器、循环/数据状态以接续同一训练过程。&#10;作用：尽量维持中断前更新轨迹，区别于把旧权重用于新任务。&#10;本项目：base提供resume-from-step，加载每卡optimizer与loop_state，数据记pq_idx/rg_idx/epoch后从后一个行组继续。&#10;注意：未存装箱缓冲、预取batch、RNG、GradScaler，属于近似恢复；SFT/RL无同阶段恢复接口，改world size无状态迁移。&#10;位置：scripts/base_train.py:157 resuming；scripts/base_train.py:330 loader state；nanochat/dataloader.py:53 恢复">断点恢复</abbr>（[释义](12-6-checkpoints-evaluation-and-delivery.md#term-resume)）是原训练接续机制，见第 9 节，不与跨阶段热启动混淆。

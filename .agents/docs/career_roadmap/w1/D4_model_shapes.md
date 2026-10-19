@@ -91,6 +91,7 @@ python .agents/docs/career_roadmap/w1/scripts/probe_model_and_cache.py --mode sh
 新建 `experiments/inference_infra/reports/model_path.md`，至少包含：配置表、上面的形状链、smear/QK norm/backout 的位置、GPT.generate 伪流程、实际 JSON 链接。下图采用纵向布局，节点内标注输出 shape，表示不传 targets、无缓存且 `T>1` 的 forward 路径：
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
 flowchart TD
   ids["Token IDs<br/>[B, T]"]
   embed["Embedding → compute dtype<br/>[B, T, C]"]
@@ -104,6 +105,8 @@ flowchart TD
 
   ids --> embed --> first_norm --> smear --> blocks
   blocks --> backout --> final_norm --> head --> logits
+    classDef default fill:#123d57,stroke:#7dd3fc,color:#ffffff,stroke-width:2px;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
 ```
 
 `Vpad` 表示模型为对齐而补齐后的词表大小，`V` 是实际词表大小。将上图中的符号替换为本次实验的具体尺寸；Attention 内部的 Q/K/V 布局另用第 2 节的表补充。不要将 hook 看到的线性层输出错标成多头布局。

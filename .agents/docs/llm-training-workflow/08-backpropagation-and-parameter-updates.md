@@ -108,7 +108,7 @@ SFT默认继承base meta长度、每卡行数、总batch，以及base user_confi
 从上到下；实线为常规更新，虚线为fp16选择路径，循环箭头表示继续微批。直接路线和缩放路线择一；fp16必须先unscale/溢出判断。没有把不存在的裁剪插成必需步骤。
 
 ~~~mermaid
-%%{init: {'theme':'base','themeVariables':{'lineColor':'#f8fafc','fontSize':'15px'},'flowchart':{'curve':'linear'}}}%%
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
 flowchart TD
     A["起点：各rank编码 + 装箱 + shift + mask"] --> B["当前权重前向 → logits → 有效目标损失"]
     B --> C["loss / 累积次数A"]
@@ -131,7 +131,7 @@ flowchart TD
     class A,H data;
     class B,C,D,E,N,Y,F,G,S,U compute;
     class I eval;
-    linkStyle default stroke:#f8fafc,stroke-width:3px;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
 ~~~
 
 原循环把评估/保存放在下一次更新之前，图末概括两次更新之间的周期动作；如果fp16溢出，该步可跳过权重更新但循环计数仍推进。

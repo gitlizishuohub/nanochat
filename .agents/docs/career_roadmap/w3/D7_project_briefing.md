@@ -77,12 +77,15 @@ python .agents/docs/career_roadmap/w3/scripts/prepare_materials.py \
 在讲稿中加入下面图形骨架；这是信息组织示例，节点不能自动表示已完成。用相邻文字为每个节点标记 `VERIFIED_CPU`、`PENDING_GPU` 或 `PLANNED`，再补实际产物链接。若 Markdown 阅读器不支持 Mermaid，保留节点表即可，不为此安装绘图库。
 
 ```mermaid
-flowchart LR
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
+flowchart TD
     A[MiniMind 数据与训练] --> B[恢复和 KV 对照]
     B --> C[nanochat 模型与输入契约]
     C --> D[逐次 raw 记录]
     D --> E[自动统计与审计]
     E --> F[性能采样与优化]
+    classDef default fill:#123d57,stroke:#7dd3fc,color:#ffffff,stroke-width:2px;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
 ```
 
 图下写六行表：节点、状态、对应文件、该文件证明什么、不能证明什么。MiniMind 归档节点链接到真实归档报告；nanochat raw 节点链接到具体 JSONL；统计节点链接到 baseline.csv/audit；最后的优化节点若未做就写 PLANNED，不链接空文件。
