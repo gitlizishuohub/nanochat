@@ -31,18 +31,7 @@ exec > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
 
-在 `experiments/inference_infra/reports/d15_experiment-log.md` 末尾追加当天日志，记录实际执行日期；标题里的 W3 Dn 是学习顺序，补做时不能倒填为此前已完成。
-
-```text
-学习槽位：W3 / 当日标题编号
-实际开始与结束：
-解释器、git commit、相关源码是否有未提交改动：
-命令（完整参数）与退出码：
-输入来源 / 产物路径：
-观察到的事实：
-尚未验证 / 阻塞原因：
-下一步 / 下次检查时间：
-```
+本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
 
 ## 今天的目标（约 3 小时）
 
@@ -87,7 +76,7 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 
 教学例子不是测量结果：假设 B=1、G=4，TTFT=10ms，decode step=[2,3,4]ms，则 elapsed≈19ms，TPOT=3ms，吞吐=4/0.019≈210.53 token/s。B=4 且每行完整4个 token 时，分子是16，但绝不能提前假定 elapsed仍19ms。
 
-抽取一个真实 run_id，用计算器按同样公式复算，然后在 `experiments/inference_infra/reports/d19_statistics_audit.md` 写：文件、行号、run_id、原始值、公式、自动表对应组键、差异。基准程序另存的 tpot/tokens_per_s 与复算值不一致时先核查定义，不改 raw 数字迎合表格。
+抽取一个真实 run_id，用计算器按同样公式复算，然后在聊天给出文件、行号、run_id、原始值、公式、自动表对应组键和差异；可选整理到 `experiments/inference_infra/reports/d19_statistics_audit.md`，不要求另写报告。基准程序另存的 tpot/tokens_per_s 与复算值不一致时先核查定义，不改 raw 数字迎合表格。
 
 ## 失败分流与验收
 
@@ -108,22 +97,31 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d19_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码人工记入日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 人工追加；跨日复用首次文件 | 人工编写 |
+| `experiments/inference_infra/reports/d19_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/summary/d19_baseline.csv` | 独立条件的统计表 | d13_aggregate.py --output | 条件生成；有测量组时生成，可含无有效样本组 |
 | `experiments/inference_infra/results/summary/d19_baseline_audit.jsonl` | 逐行纳入/排除原因 | d13_aggregate.py --audit | 随统计成功自动生成 |
 | `experiments/inference_infra/results/summary/d19_baseline_b1.csv` | B1 独立目录汇总 | d13_aggregate.py --output | 条件生成；仅选择 B1 attempt 目录并指定此输出时 |
 | `experiments/inference_infra/results/summary/d19_baseline_b1_audit.jsonl` | B1 逐行审计 | d13_aggregate.py --audit | 随对应 B1 统计成功生成 |
 | `experiments/inference_infra/results/summary/d19_baseline_b4.csv` | B4 独立目录汇总 | d13_aggregate.py --output | 条件生成；仅选择 B4 attempt 目录并指定此输出时 |
 | `experiments/inference_infra/results/summary/d19_baseline_b4_audit.jsonl` | B4 逐行审计 | d13_aggregate.py --audit | 随对应 B4 统计成功生成 |
-| `experiments/inference_infra/reports/d19_statistics_audit.md` | 人工抽取 run_id 复算记录 | 第4步 | 人工编写 |
+| `experiments/inference_infra/reports/d19_statistics_audit.md` | 人工抽取 run_id 复算记录 | 第4步交流后自愿整理 | 可选人工笔记，聊天中的复算可替代 |
+
+## 本日自验证与交流
+
+按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+
+1. 本次聚合具体读了哪个 raw 目录、生成哪份 CSV/audit？为什么没有混入计划、不同 attempt 或不同环境的样本？指向实际组键与 run_ids。
+2. 抽一个真实文件行号和 run_id，给出 TTFT、decode_step_ms、generated_tokens、elapsed_ms，自己复算 TPOT 与 tokens/s，与自动值相差多少？
+3. 指出一条被排除的行及 audit 原因；若没有排除行，就解释一个实际纳入行如何满足完整 G 步、有效 token 和计时检查。
+4. 当前 n_valid、预热数和组状态是什么？5 个样本的 P95 怎么取，为什么不能声称稳定尾延迟？哪些 GPU/权重/背景负载条件仍未验证？
 
 ## 核对记录与完成标记
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。填写实际日志后再勾选：
+本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
 
 - [ ] 输入条件与前一天产物已核实。
 - [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 日志、原始输出与材料保存到所写位置。
+- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
 - [ ] 示例数值与真实结果已区分，失败和待测未删除。
 - [ ] 能说明本日证据证明什么、尚不能证明什么。

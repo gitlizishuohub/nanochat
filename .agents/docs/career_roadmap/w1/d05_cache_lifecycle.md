@@ -16,7 +16,7 @@ knowledge_scope: W1 D5 预分配缓存生命周期与状态探查
 
 # W1 D5：跟踪 prefill、批量复制和逐步 decode
 
-今天不重写缓存。你要理解已有缓存的生命周期，并实际检查位置推进与 smear 状态。预计 90 分钟：20 分钟容器，25 分钟生成器，20 分钟探查，15 分钟报告，10 分钟验收。没有 GPU 和 checkpoint 都可用 CPU 随机模型完成。
+今天不重写缓存。你要理解已有缓存的生命周期，并实际检查位置推进与 smear 状态。预计 90 分钟：20 分钟容器，25 分钟生成器，20 分钟探查，15 分钟核验问题，10 分钟验收。没有 GPU 和 checkpoint 都可用 CPU 随机模型完成。
 
 前置：[D4 模型与形状](d04_model_shapes.md)。D4 的无缓存路径是对照；今天必须使用相同权重与相同前缀比较，不能比较两个独立随机模型。
 
@@ -31,12 +31,12 @@ knowledge_scope: W1 D5 预分配缓存生命周期与状态探查
 | 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d05_cache_probe.json` | 缓存位置、误差、复制/reset 检查 | `d04_probe_model_and_cache.py --mode cache` | 条件生成：导入和全部断言成功后自动写入；产物首次属于 d05 |
-| `experiments/inference_infra/reports/d05_cache_path.md` | 缓存生命周期与容量公式 | 第 4 节在编辑器编写 | 人工编写 |
-| `experiments/inference_infra/reports/d05_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/reports/d05_cache_path.md` | 缓存生命周期与容量公式 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
+| `experiments/inference_infra/reports/d05_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d05_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d05_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 先读缓存容器，不先读采样循环
 
@@ -58,7 +58,7 @@ rg -n 'kv_cache.advance|prev_embedding|T0 =|flash_attn_with_kvcache' nanochat/gp
 - K/V 写入发生在 attention 后端；位置只在最后一个模型层处理后推进一次，不能每层都加 T。
 - `reset()` 清空位置、把 `prev_embedding` 设为 None，**没有把 K/V 存储全部置零**。旧数值仍可能存在，但正确实现不应读有效长度外的区域。
 
-<abbr title="prev_embedding · 缓存的前一 token 归一化 embedding，形状通常为 [B,1,C]。它供下一步 smear 使用，不是 Key 或 Value 的别名。仅拷贝 K/V 而漏掉它，会破坏当前模型的增量推理状态。">prev_embedding</abbr> 是今天最容易漏掉的状态。报告中必须单独画出来。
+<abbr title="prev_embedding · 缓存的前一 token 归一化 embedding，形状通常为 [B,1,C]。它供下一步 smear 使用，不是 Key 或 Value 的别名。仅拷贝 K/V 而漏掉它，会破坏当前模型的增量推理状态。">prev_embedding</abbr> 是今天最容易漏掉的状态。交流时需单独说明其来源、更新与复制。
 
 ## 2. 对照 Engine.generate 的两次分配
 
@@ -67,7 +67,7 @@ sed -n '195,310p' nanochat/engine.py
 sed -n '470,535p' nanochat/gpt.py
 ```
 
-在纸上写一条 `P=8,B=4,G=4` 的时间线：
+对照下面 `P=8,B=4,G=4` 的时间线，确认每步状态，可直接口述：
 
 | 阶段 | 输入与缓存 | 位置与状态 |
 |---|---|---|
@@ -114,23 +114,16 @@ python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mod
 
 编写时验证记录（2026-10-15）：Conda `nanochat` / torch 2.9.1+cpu 实测 4 步位置为 8、9、10、11；最大绝对 logits 差 `7.450580596923828e-09`，greedy token 一致；B=4 的 K/V 与 prev 复制、reset 均通过。这里只验证上述小配置，不外推 GPU、真实 checkpoint 或所有边界。
 
-## 4. 写缓存报告与内存公式
+## 4. 当天自验证与交流问题及内存公式
 
-新建 `experiments/inference_infra/reports/d05_cache_path.md`，按“容器 → prefill → 复制 → decode → reset”顺序写。至少保存：
+完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d05_cache_path.md` 仅供需要时可选整理，不是必交文件。
 
-```markdown
-# 缓存路径
-- 实际日期 / commit / Python / dtype：
-- 源码入口：KVCache、Engine.generate、GPT.forward
-- K/V 本体 shape：
-- cache_seqlens 类型与批内位置假设：
-- prev_embedding 来源、更新和复制规则：
-- 每层写入位置 / 最后一层推进规则：
-- 随机模型探查 JSON：
-- 实际最大误差与 greedy 是否一致：
-- 复制与 reset 检查：
-- 未覆盖：真实 checkpoint、GPU后端、长上下文边界等
-```
+1. K/V 本体、`cache_seqlens`、`prev_embedding` 分别存什么、shape 是什么？指出源码中它们的写入与最后一层推进位置，为什么不能每层推进？
+2. 对 `P=8,B=4,G=4`，从 prefill 分配到首次 yield、下次恢复，缓存容量、有效长度和 batch 怎样变化？为什么第一 token 不需要一次单 token forward？
+3. 打开本次 `d05_cache_probe.json`，逐步读出输入长度、before/after、最大误差与 greedy 是否一致。“4 步”为何只有 3 次 decode？若运行失败，停在哪步？
+4. 复制到 batch=4 时除 K/V 还要复制什么？reset 后什么清零、什么仍可能保留？用探查结果与源码说明，不把位置归零解释成存储清零。
+5. 代入本次 L、B、Tmax、Hkv、Dh 和元素字节数，K/V 理论容量是多少？为什么不能用有效长度 P 替代 Tmax，又为什么它不等于进程总内存？
+6. 本次只证明了哪种随机配置与 dtype？GPU、真实 checkpoint、长上下文与 Engine 结束/工具状态机哪些尚未覆盖，下一项应补什么？
 
 预分配 K/V 理论字节数：`2 * L * B * Tmax * Hkv * Dh * 每元素字节数`。有效 token 数 P 不应替代容量 Tmax 估算分配量。不要声称 KV Cache 降低总显存；它用额外状态换取后续少算历史。
 
@@ -142,6 +135,6 @@ python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mod
 - 单行对，复制后错：检查批量广播、有效前缀和 prev 的复制。
 - 误差为零：可以是真结果，但还要看是否用了非零投影和 smear；脚本已避免默认零投影让测试失去区分力。
 
-验收：生命周期表完整；掌握容量/有效长度差别；能解释 prev；保存真实 JSON 或阻塞原因；不把这份小探查当作 W9 全覆盖回归。追加真实日期、commit、用时、命令、结果路径、状态、下一步。
+验收：能讲清生命周期各阶段；掌握容量/有效长度差别；能解释 prev；保存真实 JSON 或阻塞原因；不把这份小探查当作 W9 全覆盖回归。交流附真实日期、commit、命令、结果路径、状态与下一步；用时可选。
 
 上一篇：[D4 模型形状](d04_model_shapes.md)。下一篇：[D6 后端路由](d06_attention_backends.md)。

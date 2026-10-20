@@ -31,18 +31,7 @@ exec > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
 
-在 `experiments/inference_infra/reports/d15_experiment-log.md` 末尾追加当天日志，记录实际执行日期；标题里的 W3 Dn 是学习顺序，补做时不能倒填为此前已完成。
-
-```text
-学习槽位：W3 / 当日标题编号
-实际开始与结束：
-解释器、git commit、相关源码是否有未提交改动：
-命令（完整参数）与退出码：
-输入来源 / 产物路径：
-观察到的事实：
-尚未验证 / 阻塞原因：
-下一步 / 下次检查时间：
-```
+本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
 
 ## 今天的目标（约 2–4 小时，计时任务可缩短）
 
@@ -72,7 +61,7 @@ python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
 
 `--execute` 是实际运行开关；去掉它仅列计划。程序逐 case 等待并保存完整 log；`PROCESS_OK` 仅说明子进程退出码为 0，不等于全部正式行都有效。其余 B=4 case 仍列 PENDING。顺序固定有利于首次核查，正式分析仍需考虑温度、时钟和背景负载；不要把一次跑出来的最小值当成绩。
 
-在运行中观察机器负载和日志；一组耗时明显超出预算可用 Ctrl+C 停止，保留已落盘行，日志写中断时间。中断可能导致矩阵缺未落盘 case，不能标成全矩阵完成；恢复用新的 attempt 目录。
+在运行中观察机器负载和日志；一组耗时明显超出预算可用 Ctrl+C 停止，保留已落盘行，在聊天注明中断时间，或可选补入日志。中断可能导致矩阵缺未落盘 case，不能标成全矩阵完成；恢复用新的 attempt 目录。
 
 ## 第二步 B：无 GPU，执行一个小 CPU 契约
 
@@ -107,7 +96,7 @@ python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/resu
 - `INVALID_CONTEXT`：今天不运行；应扩大合法 checkpoint 上下文并重建不同实验，而非悄悄截断 P。
 - 正式有效不足 5 次：可继续补跑同条件新 attempt，但跨目录合并前审计模型、env 和 run_id；今天可标不足样本。
 
-在 `experiments/inference_infra/reports/d17_baseline_b1.md` 写每 case 的计划状态、退出码、measure总数/有效数、raw与log路径。验收：所有 B1 候选都可追踪；至少一个可用设备的功能验证或明确依赖阻塞；没有将 CPU/random 数字写成 GPU baseline。下一天专看批量行为。
+按文末问题在聊天核对每 case 的计划状态、退出码、measure总数/有效数、raw与log路径；`experiments/inference_infra/reports/d17_baseline_b1.md` 仅为可选整理位置。验收：所有 B1 候选都可追踪；至少一个可用设备的功能验证或明确依赖阻塞；没有将 CPU/random 数字写成 GPU baseline。下一天专看批量行为。
 
 ## 本日脚本与产物清单
 
@@ -120,8 +109,8 @@ python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/resu
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d17_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码人工记入日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 人工追加；跨日复用首次文件 | 人工编写 |
+| `experiments/inference_infra/reports/d17_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g32_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g32_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
@@ -136,14 +125,23 @@ python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/resu
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p512_g128_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p512_g128_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
 | `experiments/inference_infra/results/raw/d17_p32_g8_b1_cpu_contract.jsonl` | 无 GPU 分支的短输入随机模型记录 | d12_benchmark.py | 仅执行 CPU 分支且成功写入后存在 |
-| `experiments/inference_infra/reports/d17_baseline_b1.md` | 候选状态、有效数及失败边界 | 末尾验收步骤 | 人工编写 |
+| `experiments/inference_infra/reports/d17_baseline_b1.md` | 候选状态、有效数及失败边界 | 末尾交流后自愿整理 | 可选人工笔记，聊天和原始结果可替代 |
+
+## 本日自验证与交流
+
+按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+
+1. 今天实际走 GPU checkpoint 还是 CPU random 分支？给出 matrix、raw、log 或测试输出路径，说明哪些路径通过、哪些 skip 或依赖阻塞。
+2. 选一个 B1 case：计划状态、退出码、正式行总数和完整有效数各是多少？PROCESS_OK 为什么不能直接作为基线通过？
+3. 从一个真实 run_id 解释 TTFT、decode_step_ms、actual_decode_steps 和 generated_tokens 的含义与单位；哪个字段能看出提前结束或有效 token 不足？
+4. 所有 B1 候选是否都能追踪到成功、失败、非法上下文或待 GPU？列出尚未验证的项；CPU 结果能证明什么，不能证明什么？
 
 ## 核对记录与完成标记
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。填写实际日志后再勾选：
+本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
 
 - [ ] 输入条件与前一天产物已核实。
 - [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 日志、原始输出与材料保存到所写位置。
+- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
 - [ ] 示例数值与真实结果已区分，失败和待测未删除。
 - [ ] 能说明本日证据证明什么、尚不能证明什么。

@@ -33,13 +33,13 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 exec > >(tee -a experiments/inference_infra/reports/d09_session.log) 2>&1
 ```
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。在报告写出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
+解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d09_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时在报告标明会话边界。
+本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d09_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
-用 20 分钟准备数据，25 分钟做可逆编码检查，20 分钟检查训练批次，15 分钟记录。完成标志是有实际断言输出，或有明确错误与恢复方法。先读 [昨天的数据盘点](d08_data_prerequisites.md)，确认你选择 existing 还是 isolated-synthetic。
+用 20 分钟准备数据，25 分钟做可逆编码检查，20 分钟检查训练批次，15 分钟自验证并交流。完成标志是有实际断言输出，或有明确错误与恢复方法。先读 [昨天的数据盘点](d08_data_prerequisites.md)，确认你选择 existing 还是 isolated-synthetic。
 
 ## 第一步：没有数据时，创建独立的 smoke 数据
 
@@ -52,7 +52,7 @@ export NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy
 python .agents/docs/career_roadmap/w2/scripts/d08_data_check.py --output experiments/inference_infra/reports/d09_toy_inventory.json
 ```
 
-脚本创建 1,200 条 train 和 1,200 条 val 合成句子、两份含 `text` 列的 parquet、本项目 RustBPETokenizer 训练产生的词表，以及准确的 token_bytes。`d09_synthetic_provenance.json` 记录来源。train 与 val 使用不同模板，但这种重复数据只用于功能 smoke，不能拿 val loss 评价真实语言能力。临时根目录重启后可能丢失；要长期保存可换到自己有权限的大数据盘路径，并在报告中记录。
+脚本创建 1,200 条 train 和 1,200 条 val 合成句子、两份含 `text` 列的 parquet、本项目 RustBPETokenizer 训练产生的词表，以及准确的 token_bytes。`d09_synthetic_provenance.json` 记录来源。train 与 val 使用不同模板，但这种重复数据只用于功能 smoke，不能拿 val loss 评价真实语言能力。临时根目录重启后可能丢失；要长期保存可换到自己有权限的大数据盘路径，并在交流时说明。
 
 **已有数据分支**：跳过准备命令，设置 `export NANOCHAT_BASE_DIR=你已核验的实际绝对路径`。不要把示例 `/tmp` 路径设置到真实数据实验上。
 
@@ -82,11 +82,11 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 3. 每行输入以 BOS 起头，ID 都在词表范围；
 4. train 与 val 都能产出，不会卡在空 train split。
 
-<abbr title="Best-Fit Cropping · 从文档缓冲区中优先选择能完整塞入剩余空间的最长文档，塞不下时裁切。本文每行构造 T+1 个 token，再错位生成 x/y；没有 padding 不代表没有被裁切内容。">best-fit</abbr> 不等于简单按文件拼接；看清 T+1 到 `[B,T]` 的变化，再在报告手画一个 6-token 的错位例子。
+<abbr title="Best-Fit Cropping · 从文档缓冲区中优先选择能完整塞入剩余空间的最长文档，塞不下时裁切。本文每行构造 T+1 个 token，再错位生成 x/y；没有 padding 不代表没有被裁切内容。">best-fit</abbr> 不等于简单按文件拼接；看清 T+1 到 `[B,T]` 的变化，再用聊天文字给出一个 6-token 的错位例子。
 
-## 第四步：保留解释而不只写“passed”
+## 第四步：自行核对后交流
 
-在 `experiments/inference_infra/reports/d09_token_roundtrip.md` 写：使用哪个数据根、两个 JSON 路径、一个中文样本 ID 列表、BOS 的来源、x/y 错位示意，以及“合成数据只证明功能”这一边界。记录两条命令的真实退出码。
+直接用文末问题讨论两个 JSON、中文样本、BOS 和 x/y 错位。附实际输出与退出码，不只给出“passed”；`experiments/inference_infra/reports/d09_token_roundtrip.md` 仅为可选整理位置。
 
 ## 失败分流与验收
 
@@ -94,7 +94,7 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 - `pickle` 或词表异常：只使用自己生成或信任来源的 tokenizer；回到隔离目录重新准备，保留原数据。
 - `get_token_bytes` 报缺失：今天准备脚本会生成它；已有数据则回溯同一 tokenizer 的生成记录。
 - dataloader 长时间没有输出：先查 train split 文件数、row group、text 是否全空；不要无限等待没有数据的 iterator。
-- 验收：实际输出 `status=ok`、每个断言可解释；依赖受阻时报告写出缺包名称及未执行范围，明天不可宣称已有合法 checkpoint。
+- 验收：实际输出 `status=ok`、每个断言可解释；依赖受阻时交流中说明缺包名称及未执行范围，明天不可宣称已有合法 checkpoint。
 
 ## 今日脚本与产物清单
 
@@ -111,7 +111,7 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 | `experiments/inference_infra/reports/d09_toy_inventory.json` | 合成目录盘点 | d08_data_check.py | 条件自动；仅合成分支 |
 | `experiments/inference_infra/reports/d09_token_roundtrip.json` | 六组 tokenizer 断言 | d09_roundtrip.py | 自动；成功或捕获的异常均写 JSON |
 | `experiments/inference_infra/reports/d09_token_data_roundtrip.json` | train/val 批次断言 | d09_roundtrip.py --check-data | 条件自动；需执行数据检查 |
-| `experiments/inference_infra/reports/d09_token_roundtrip.md` | 往返与错位示意说明 | 第四步 | 人工编写 |
+| `experiments/inference_infra/reports/d09_token_roundtrip.md` | 往返与错位示意说明 | 第四步 | 可选人工整理；可直接在聊天中回答本日问题 |
 | `experiments/inference_infra/reports/d09_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
 
 合成分支的外部数据根示例为 `/tmp/nanochat-w2-toy`（仓库外，须是全新目录）；脚本条件自动生成下列文件，已有数据分支不生成它们：
@@ -124,23 +124,20 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 | `/tmp/nanochat-w2-toy/tokenizer/token_bytes.pt` | 原生 token 字节长度 | d09_prepare_toy.py；条件自动 |
 | `/tmp/nanochat-w2-toy/d09_synthetic_provenance.json` | 合成数据来源说明 | d09_prepare_toy.py；条件自动 |
 
-原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有运行、条件不满足、人工未填写的项目均标 PENDING。
+原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 
-## 当天记录与离开前核对
+## 今日自验证与交流问题
 
-把以下模板填写到当天报告末尾；运行命令原样保留，失败也写退出码。`PENDING` 表示没有执行；不要用空值代替失败事实。
+自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
 
-```text
-日期：
-源码 commit / dirty 状态：
-解释器 / 设备 / NANOCHAT_DTYPE：
-NANOCHAT_BASE_DIR：
-实际用时：
-运行命令与退出码：
-原始结果路径：
-已验证的事实：
-未验证或阻塞：
-下一次恢复的第一条命令：
-```
+1. 六组往返样本中，选一个中文或 emoji 样本贴出文本和 token ID；为什么 token 数、字符数与字节数可能不同？引用 `d09_token_roundtrip.json` 的实际结果。
 
-记录 commit 使用 `git rev-parse HEAD`，改动状态使用 `git status --short`。共享给别人前检查数据路径和日志是否包含私人信息。只提交本次自己的轻量报告和脚本，不提交权重、数据、环境目录或机器特有缓存。
+2. 空字符串普通 encode 与加 BOS 有什么不同？BOS 的 ID 从哪里取得，为什么不能把带 BOS 的直接解码结果与原文比较？
+
+3. 从 `d09_token_data_roundtrip.json` 解释 x/y 的形状与错位关系，再用6个 token 的短序列写出对应输入和目标；best-fit 为什么不等于无裁切拼接？
+
+4. 两个 split 是否都产生合法批次，特殊 ID 与 token_bytes 检查是否通过？附两条检查命令的退出码；若失败，指出第一个失败断言、缺包或缺文件。
+
+5. 这次数据根与来源是什么？合成数据通过证明了哪些功能，还有哪些语言能力、真实数据或训练结果没有验证？
+
+离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

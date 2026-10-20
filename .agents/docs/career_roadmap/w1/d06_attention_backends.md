@@ -14,9 +14,9 @@ doc_type: tutorial
 knowledge_scope: W1 D6 注意力后端条件与CPU覆盖边界
 ---
 
-# W1 D6：画出 FA3 与 SDPA 的选择条件
+# W1 D6：解释 FA3 与 SDPA 的选择条件
 
-今天要回答“实际用的是哪个后端，为什么”，而不是只看到文件名里有 Flash Attention 就认定正在调用 GPU 内核。预计 60–90 分钟：20 分钟路由，20 分钟掩码，15 分钟定向测试，20 分钟后端条件表，10 分钟口述。
+今天要回答“实际用的是哪个后端，为什么”，而不是只看到文件名里有 Flash Attention 就认定正在调用 GPU 内核。预计 60–90 分钟：20 分钟路由，20 分钟掩码，15 分钟定向测试，20 分钟核验后端条件，10 分钟口述。
 
 前置：[D5 缓存生命周期](d05_cache_lifecycle.md)。不用下载内核；CPU 只验证 SDPA 与相关契约，FA3 留待 GPU 条件齐备。
 
@@ -33,12 +33,12 @@ knowledge_scope: W1 D6 注意力后端条件与CPU覆盖边界
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log` | 本次筛选测试结果 | 复用 `d03_run_inference_tests.py` | 自动；使用新时间戳，保留首次日 d03 文件名 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 本次筛选测试诊断 | 同上 | 自动，可为空 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 本次筛选表达式、退出码与用时 | 同上 | 条件生成：子进程正常返回后写入 |
-| `experiments/inference_infra/reports/d06_attention_backends.md` | 后端条件表、掩码和覆盖边界 | 第 5 节在编辑器编写 | 人工编写 |
-| `experiments/inference_infra/reports/d06_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/reports/d06_attention_backends.md` | 后端条件表、掩码和覆盖边界 | 第 5 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
+| `experiments/inference_infra/reports/d06_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d06_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d06_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 按源码分开“可加载”与“最终使用”
 
@@ -56,7 +56,7 @@ sed -n '10,36p' nanochat/common.py
 
 `HAS_FA3` 表示加载到了接口；`USE_FA3` 是经过 override 和 compute dtype 判断后实际选择的分支。自动模式下，即使 HAS 为 true，也只有 `COMPUTE_DTYPE == torch.bfloat16` 才选 FA3。<abbr title="bf16 / bfloat16 · 16 位浮点格式。这里是自动选择 FA3 的条件之一；它不是 GPU 存在的充分条件，也不代表所有 dtype 分支都测过。">bf16</abbr> 要结合当前路由理解。
 
-把下面表复制进报告，最后一列填真实证据状态：
+对照下面条件表核验最后一列的真实证据状态，可直接在聊天中说明：
 
 | 条件 | HAS_FA3 | 自动 USE_FA3 | 本机证据 |
 |---|---|---|---|
@@ -109,24 +109,18 @@ rg -n 'class TestSDPAOnly|class TestOverrideMechanism|def test_|skipif' tests/te
 
 若前文 D4/D5 已执行，可引用 `d04_shapes_probe.json` 中的 `USE_FA3=false` 佐证随机模型探查走回退。仅脚本 `--help` 成功不足以证明后端计算通过。
 
-## 5. 写后端报告与边界
+## 5. 当天自验证与交流问题及边界
 
-在 `experiments/inference_infra/reports/d06_attention_backends.md` 保存：条件表、两种布局、三分支掩码、批内等长假设、测试原始日志、无法 CPU 验证的路径。
+完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d06_attention_backends.md` 仅供需要时可选整理，不是必交文件。
 
-```markdown
-# 后端路由
-- 实际日期 / commit / Python / NANOCHAT_DTYPE：
-- 本次选中后端与证据：
-- HAS_FA3 与 USE_FA3 的差别：
-- 外部布局 / SDPA 内部布局：
-- Tq==Tk、Tq==1、chunk 三种处理：
-- 选定测试摘要与日志：
-- GPU专属未验证项：
-- 后续GPU会话需补哪些对照：
-```
+1. `HAS_FA3` 与 `USE_FA3` 有什么区别？结合第 1 节条件表和实际日志指出本机选择，哪些结论只来自源码、哪些经过运行？
+2. 外部 `[B,T,H,D]` 如何变成 SDPA 内部布局再返回？D4 的 Hq=4、Hkv=2 为什么启用 GQA？指出 transpose 与判定位置。
+3. 手算 `Tk=10,Tq=2,W=2` 时两个 query 各可访问哪些 key；为何 query 起点为 `Tk-Tq`？`Tq=1` 又为什么截取 `W+1` 且不用因果开关？
+4. 缓存分支在哪写入新 K/V、在哪推进位置？`cache_seqlens[0]` 对批内位置有什么假设？
+5. 本次筛选表达式、退出码、通过与跳过情况是什么？给出新时间戳日志目录；这些 CPU 用例还不能证明哪些 FA3/GPU 数值与 dtype 路径，未来要补什么对照？
 
 失败时先判断：导入依赖缺失 → 环境；FA3 override 断言 → 当前后端不可用；dtype 不匹配 → 检查导入前环境；CPU 用例数值失败 → 保存最早失败和 shape，不换后端掩盖问题。
 
-当天验收：能解释 HAS/USE；手算 chunk mask；指出 `Tq=1` 的 `W+1`；报告明确 CPU 已覆盖与 GPU 未覆盖。追加真实日期、commit、用时、命令、日志、状态及下一步。
+当天验收：能解释 HAS/USE；手算 chunk mask；指出 `Tq=1` 的 `W+1`；回答明确 CPU 已覆盖与 GPU 未覆盖。交流附实际日期、commit、命令、日志路径、状态与下一步；用时可选。
 
 上一篇：[D5 缓存生命周期](d05_cache_lifecycle.md)。下一篇：[D7 基准审计](d07_benchmark_audit.md)。

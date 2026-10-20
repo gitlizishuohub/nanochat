@@ -31,24 +31,13 @@ exec > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
 
-在 `experiments/inference_infra/reports/d15_experiment-log.md` 末尾追加当天日志，记录实际执行日期；标题里的 W3 Dn 是学习顺序，补做时不能倒填为此前已完成。
-
-```text
-学习槽位：W3 / 当日标题编号
-实际开始与结束：
-解释器、git commit、相关源码是否有未提交改动：
-命令（完整参数）与退出码：
-输入来源 / 产物路径：
-观察到的事实：
-尚未验证 / 阻塞原因：
-下一步 / 下次检查时间：
-```
+本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
 
 ## 今天的目标和前置（约 3 小时）
 
 前置：W2 有可加载的 nanochat checkpoint、配套 tokenizer 和 `meta_NNNNNN.json`。今天把“测什么”冻结成 12 个候选组合，先检查再运行。P 是输入 token 数，G 是要求生成的步数，B 是同一提示词的生成样本数；这里不是 B 条独立提示词的服务端并发吞吐。
 
-分配：40 分钟核对模型，40 分钟生成矩阵，40 分钟估算内存，40 分钟写协议。<abbr title="Checkpoint · 检查点；本项目由模型权重与 JSON 元数据等配套文件构成。必须与 nanochat 架构和 tokenizer 匹配，不能直接加载 MiniMind 权重。">checkpoint</abbr> 必须有固定 source、model_tag 和 step；省略后自动选择最大模型或最新 step 会导致重跑时换模型。
+分配：40 分钟核对模型，40 分钟生成矩阵，40 分钟估算内存，40 分钟核对协议与交流。<abbr title="Checkpoint · 检查点；本项目由模型权重与 JSON 元数据等配套文件构成。必须与 nanochat 架构和 tokenizer 匹配，不能直接加载 MiniMind 权重。">checkpoint</abbr> 必须有固定 source、model_tag 和 step；省略后自动选择最大模型或最新 step 会导致重跑时换模型。
 
 ## 第一步：找出你实际使用的文件
 
@@ -89,11 +78,11 @@ W2基准默认使用 `[BOS]+[1]×(P−1)` 的固定合成token输入，主要控
 
 Engine 先建 batch=1、T=P 的预填缓存，再建 batch=B、T=P+G 的解码缓存并复制，因此复制阶段同时存在两个缓存：缓存峰值主项约 `2×L×Hkv×Dh×s×(P+B×(P+G))`。窗口注意力减少读取范围，但此 Engine 的分配仍按完整 T；不要把滑窗长度直接代入分配容量。
 
-这还不包括权重、logits、激活、RoPE、prev_embedding、allocator 保留块和 CUDA context。把公式、配置、s 的来源和粗估值写在 `experiments/inference_infra/d12_protocol.md`，实测峰值另列。模型很小时 `vocab_size` 大仍可能使 logits/权重占显著内存。
+这还不包括权重、logits、激活、RoPE、prev_embedding、allocator 保留块和 CUDA context。在聊天给出公式、配置、s 的来源和粗估值，实测峰值另列；可选整理到 `experiments/inference_infra/d12_protocol.md`。模型很小时 `vocab_size` 大仍可能使 logits/权重占显著内存。
 
 ## 第四步：冻结运行协议
 
-在 W2 `d12_protocol.md` 下追加 W3 小节，填以下字段：
+先在聊天或既有自动记录中明确以下条件，后续据此恢复变量与比较实验；无需额外报告。若希望留文件，可选在 W2 `d12_protocol.md` 追加 W3 小节。以下是核查项目，不要求逐项另抄一份：
 
 ```text
 模型：source/model_tag/step；meta和权重SHA-256；tokenizer来源与哈希
@@ -109,7 +98,7 @@ Engine 先建 batch=1、T=P 的预填缓存，再建 batch=B、T=P+G 的解码�
 
 ## 验收和阻塞处理
 
-验收不是 12 组都必须跑通，而是 12 组都有明确状态、可行组满足长度条件、模型来源与测量协议固定。缺 checkpoint 时只写条件草稿并返回 W2；不要用虚构 meta 冒充实际模型。没有 GPU 保留 `PENDING_GPU`。下一天先测 B=1，并将 CPU 功能验证与 GPU 基线分开。
+验收不是 12 组都必须跑通，而是 12 组都有明确状态、可行组满足长度条件、模型来源与测量协议固定。缺 checkpoint 时交流缺失条件并返回 W2；不要用虚构 meta 冒充实际模型。没有 GPU 保留 `PENDING_GPU`。下一天先测 B=1，并将 CPU 功能验证与 GPU 基线分开。
 
 ## 本日脚本与产物清单
 
@@ -122,17 +111,26 @@ Engine 先建 batch=1、T=P 的预填缓存，再建 batch=B、T=P+G 的解码�
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d16_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码人工记入日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 人工追加；跨日复用首次文件 | 人工编写 |
+| `experiments/inference_infra/reports/d16_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/raw/w3_plan/d16_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
-| `experiments/inference_infra/d12_protocol.md` | 追加W3固定模型、缓存估算与测量协议 | 第3–4步 | 人工更新；复用W2首次文件 |
+| `experiments/inference_infra/d12_protocol.md` | 追加W3固定模型、缓存估算与测量协议 | 第3–4步 | 可选人工整理；协议也可由聊天和自动记录恢复 |
+
+## 本日自验证与交流
+
+按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+
+1. 实际 source、model_tag、step、tokenizer 来自哪里？给出 meta、权重或加载日志路径与已核对的哈希；哪些文件仍缺失？
+2. 你的 sequence_len 是多少？12 个 P/G/B 组合中哪些合法、哪些 INVALID_CONTEXT？指向 d16_matrix.jsonl 的实际行，解释为什么不能偷偷截短。
+3. 选一个合法 B4 组合代入缓存公式：L、Hkv、Dh、s 分别来自哪里，两个缓存共存时粗估多少字节？说明它未包含哪些内存，实测峰值是否仍待验证。
+4. 你冻结了哪些输入、采样、预热、正式次数、精度和后端条件？用矩阵/自动记录或聊天中的完整参数恢复一次计划；为什么有 CUDA 也不保证 FA3？
 
 ## 核对记录与完成标记
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。填写实际日志后再勾选：
+本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
 
 - [ ] 输入条件与前一天产物已核实。
 - [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 日志、原始输出与材料保存到所写位置。
+- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
 - [ ] 示例数值与真实结果已区分，失败和待测未删除。
 - [ ] 能说明本日证据证明什么、尚不能证明什么。

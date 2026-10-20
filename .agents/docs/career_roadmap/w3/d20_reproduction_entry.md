@@ -31,24 +31,13 @@ exec > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
 
-在 `experiments/inference_infra/reports/d15_experiment-log.md` 末尾追加当天日志，记录实际执行日期；标题里的 W3 Dn 是学习顺序，补做时不能倒填为此前已完成。
-
-```text
-学习槽位：W3 / 当日标题编号
-实际开始与结束：
-解释器、git commit、相关源码是否有未提交改动：
-命令（完整参数）与退出码：
-输入来源 / 产物路径：
-观察到的事实：
-尚未验证 / 阻塞原因：
-下一步 / 下次检查时间：
-```
+本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
 
 ## 今天的目标与边界（约 2–3 小时）
 
 本日交付 `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md`，写清项目目的、模型来源、最短运行步骤和当前结果状态，让读者能从明确的前置条件独立复现。后续公开项目入口可引用该正文；本日先验证正文中的实际命令与文件。
 
-前置：W2 环境与模型记录、W3 原始日志和统计状态。<abbr title="Quickstart · 最短复现步骤；从明确的起始环境开始，用最少命令得到可检查产物，不等于完整训练流程。">Quickstart</abbr> 必须写读者实际需要准备的条件，不能假定有你的个人 shell 变量或缓存。
+前置：W2 环境与模型记录、W3 原始日志和统计状态；此前人工报告可用聊天和自动记录替代。复现入口本身是供他人操作的实践材料，保留完整可执行命令，不额外附写实验报告。<abbr title="Quickstart · 最短复现步骤；从明确的起始环境开始，用最少命令得到可检查产物，不等于完整训练流程。">Quickstart</abbr> 必须写读者实际需要准备的条件，不能假定有你的个人 shell 变量或缓存。
 
 ## 第一步：创建复现正文草稿
 
@@ -61,7 +50,7 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
   --evidence experiments/inference_infra/d12_protocol.md
 ```
 
-打开生成的 `d20_reproduction_entry.md`，不要只留下方括号模板。脚本检查文件与哈希不检查内容真实性，`exists:false` 必须处理或作为缺口说明。写清项目目的是建立 nanochat 推理基线和后续受控优化验证，当前不是已完成自研模型或部署服务。
+`d12_protocol.md` 若未整理成文件，省略对应 evidence 参数，直接从此前聊天、矩阵和原始记录恢复真实条件，不为模板补写报告。打开生成的 `d20_reproduction_entry.md`，不要只留下方括号模板。脚本检查文件与哈希不检查内容真实性，`exists:false` 必须处理或作为缺口说明。写清项目目的是建立 nanochat 推理基线和后续受控优化验证，当前不是已完成自研模型或部署服务。
 
 ## 第二步：填硬件、模型和数据依赖
 
@@ -75,7 +64,7 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
 
 不要把整份训练脚本复制进复现正文。下载与训练不是今天短路径的默认步骤；在“从零准备”段引用 W2 指导，注明训练耗时/资源未知时仍待实测。GPU 不可用时提供 CPU 短输入命令并明确它证明什么，不要求读者先去租卡。
 
-复用并链接第 16–19 日的完整产物清单；新终端复测必须使用新目录和 `--artifact-day 20`，新产生的矩阵、case raw/log 使用 `d20_`，不能覆盖原证据。复测输出目录在本日检查日志逐项登记完整路径。说明 `--execute` 才启动 benchmark，matrix 默认仅计划；说明 `PROCESS_OK` 与有效正式样本数是不同验收。
+复用并链接第 16–19 日的完整产物清单；新终端复测必须使用新目录和 `--artifact-day 20`，新产生的矩阵、case raw/log 使用 `d20_`，不能覆盖原证据。复测输出目录在聊天或本日检查日志中逐项给出完整路径。说明 `--execute` 才启动 benchmark，matrix 默认仅计划；说明 `PROCESS_OK` 与有效正式样本数是不同验收。
 
 ## 第四步：用新终端核查独立性
 
@@ -123,17 +112,26 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/results/raw/d20_p32_g8_b1_cpu_reproduction.jsonl` | 新终端 CPU 复查记录 | d12_benchmark.py | 条件生成；仅执行本日 CPU 命令且成功写入后存在 |
-| `experiments/inference_infra/reports/d20_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码人工记入日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 人工追加；跨日复用首次文件 | 人工编写 |
+| `experiments/inference_infra/reports/d20_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 自动生成骨架，人工完善与验收 |
 | `experiments/inference_infra/reports/w3_reproduction_v1/d20_entry_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 自动生成；文件存在不等于结论通过 |
 
+## 本日自验证与交流
+
+按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+
+1. 从新终端开始，你需要哪些硬件、依赖、checkpoint/tokenizer 和变量？给出真实来源或路径，哪些条件需要读者自行准备？
+2. 把最短可执行命令按顺序发来，并指出执行目录和参数；新终端在哪一步通过或失败，对应 d20_checks.log 哪段输出？
+3. 本日新生成的 raw、matrix 或统计在哪里，是否与旧证据隔离？解释 --execute、PROCESS_OK 与有效样本门槛的区别。
+4. 假设命令失败，读者应查哪个 log，怎样从 raw 重建统计？本日只验证了帮助/CPU/默认计划还是 GPU 也已复测，尚缺什么？
+
 ## 核对记录与完成标记
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。填写实际日志后再勾选：
+本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
 
 - [ ] 输入条件与前一天产物已核实。
 - [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 日志、原始输出与材料保存到所写位置。
+- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
 - [ ] 示例数值与真实结果已区分，失败和待测未删除。
 - [ ] 能说明本日证据证明什么、尚不能证明什么。

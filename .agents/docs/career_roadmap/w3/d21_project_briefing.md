@@ -31,28 +31,17 @@ exec > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
 
-在 `experiments/inference_infra/reports/d15_experiment-log.md` 末尾追加当天日志，记录实际执行日期；标题里的 W3 Dn 是学习顺序，补做时不能倒填为此前已完成。
-
-```text
-学习槽位：W3 / 当日标题编号
-实际开始与结束：
-解释器、git commit、相关源码是否有未提交改动：
-命令（完整参数）与退出码：
-输入来源 / 产物路径：
-观察到的事实：
-尚未验证 / 阻塞原因：
-下一步 / 下次检查时间：
-```
+本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
 
 ## 今天的目标（约 3 小时）
 
-W3 收尾不以优化数字为目标，而是能展示一条从训练产物到可信测量的证据链。前置：昨天的复现正文、简历初稿、矩阵状态和原始结果。<abbr title="Evidence chain · 证据链；每个叙述能回溯到具体输入、源码、执行日志和原始记录，而不是仅引用另一份总结。">证据链</abbr> 要让导师能判断你到底做到了哪一步，不要求没有 GPU 时编造 GPU 效果。
+W3 收尾不以优化数字为目标，而是能展示一条从训练产物到可信测量的证据链。前置：昨天的复现入口、简历初稿内容（可在聊天）、矩阵状态和原始结果。<abbr title="Evidence chain · 证据链；每个叙述能回溯到具体输入、源码、执行日志和原始记录，而不是仅引用另一份总结。">证据链</abbr> 要让导师能判断你到底做到了哪一步，不要求没有 GPU 时编造 GPU 效果。
 
-分配：30 分钟整理文件，40 分钟写讲稿，30 分钟画图，30 分钟计时口述，30 分钟核查 W3 gate。
+分配：30 分钟整理文件，40 分钟组织口述，30 分钟核对证据节点，30 分钟计时口述，30 分钟核查 W3 gate。
 
-## 第一步：生成讲稿骨架
+## 第一步：准备口述提纲（文件骨架可选）
 
-使用[材料准备脚本](scripts/d15_prepare_materials.py)，附上实际报告；无需今天发送任何邮件或联系他人。
+若希望留讲稿文件，可选使用[材料准备脚本](scripts/d15_prepare_materials.py)，附上实际复现入口或自动统计；口述练习可跳过此材料脚本。无需今天发送任何邮件或联系他人。
 
 ```bash
 python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
@@ -61,9 +50,9 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
   --evidence experiments/inference_infra/results/summary/d19_baseline.csv
 ```
 
-打开 `d21_project_briefing.md`，按时间段填写。没有 d19_baseline.csv 时在清单保留缺失并在讲稿说“尚无实测基线”，不要把缺失读成零延迟。<abbr title="Baseline · 基线；后续优化前固定条件下的测量参照。没有原始样本和方法约定的单次数字不能充当可信基线。">baseline</abbr> 是后续变化的参照，不等于优于上游或完成优化。
+可直接按下列时间段练习口述并与我交流，不要求写讲稿；需要文件时才运行材料脚本并填写 `d21_project_briefing.md`。若未生成复现正文，先回第 20 日补齐实际复现入口，不能用口头声称代替。没有 d19_baseline.csv 时在清单保留缺失并在介绍时说“尚无实测基线”，不要把缺失读成零延迟。<abbr title="Baseline · 基线；后续优化前固定条件下的测量参照。没有原始样本和方法约定的单次数字不能充当可信基线。">baseline</abbr> 是后续变化的参照，不等于优于上游或完成优化。
 
-## 第二步：逐段写成自然语言
+## 第二步：按时间段组织自然语言
 
 0:00–0:30 用两句说清问题与本人贡献：“我从小模型训练复现转到推理基础设施，先关注缓存正确性和测量可信性。当前亲自完成/复核的是……”。根据实际参与情况选择动词，不把已有产物阅读说成从头实现。
 
@@ -75,7 +64,7 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
 
 ## 第三步：制作一张能点击的证据图
 
-在讲稿中加入下面图形骨架；这是信息组织示例，节点不能自动表示已完成。用相邻文字为每个节点标记 `VERIFIED_CPU`、`PENDING_GPU` 或 `PLANNED`，再补实际产物链接。若 Markdown 阅读器不支持 Mermaid，保留节点表即可，不为此安装绘图库。
+下面图形骨架可用于口述时逐节点核查；若选择整理讲稿，可加入其中；这是信息组织示例，节点不能自动表示已完成。用相邻文字为每个节点标记 `VERIFIED_CPU`、`PENDING_GPU` 或 `PLANNED`，再补实际产物链接。若 Markdown 阅读器不支持 Mermaid，保留节点表即可，不为此安装绘图库。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
@@ -89,7 +78,7 @@ flowchart TD
     linkStyle default stroke:#3b82f6,stroke-width:3px;
 ```
 
-图下写六行表：节点、状态、对应文件、该文件证明什么、不能证明什么。MiniMind 归档节点链接到真实归档报告；nanochat raw 节点链接到具体 JSONL；统计节点链接到 d19_baseline.csv/audit；最后的优化节点若未做就写 PLANNED，不链接空文件。
+在聊天逐节点说明，或可选在图下整理六行表：节点、状态、对应文件、该文件证明什么、不能证明什么。MiniMind 归档节点链接到真实归档报告；nanochat raw 节点链接到具体 JSONL；统计节点链接到 d19_baseline.csv/audit；最后的优化节点若未做就写 PLANNED，不链接空文件。
 
 ## 第四步：计时讲一遍，回答追问
 
@@ -106,21 +95,21 @@ flowchart TD
 
 ## 第五步：执行 W3 gate
 
-在 `experiments/inference_infra/reports/d21_w3_gate.md` 写清这四类状态：材料已完成、CPU已验证、GPU待执行、明确失败。检查简历、复现正文、讲稿和 CSV 说法一致；没有把随机模型 CPU结果称成训练checkpoint GPU性能。
+直接在聊天核对这四类状态；可选整理到 `experiments/inference_infra/reports/d21_w3_gate.md`：材料已完成、CPU已验证、GPU待执行、明确失败。检查简历初稿内容、复现正文、口述和 CSV 说法一致；没有把随机模型 CPU结果称成训练checkpoint GPU性能。
 
 ```text
-一页可编辑简历：路径、待本人补填项
+简历初稿内容：聊天或可选文件路径、待本人补填项
 MiniMind证据：归档路径、核对范围、当前源码未复测边界
 nanochat最短入口：命令、模型来源、实际验证设备
 矩阵：可行/非法上下文/成功/失败/PENDING_GPU数量
 统计：raw路径、有效样本数、audit路径、未测项
-三分钟讲稿与证据图：路径、口述耗时、答不出的追问
+三分钟口述与证据节点：聊天或可选稿件/图路径、口述耗时、答不出的追问
 下一阶段：先补基线与trace；现实资源缺口及下一检查时间
 ```
 
 ## 验收与进入下一周
 
-至少展示一个可信 CPU 闭环或明确依赖阻塞，以及 nanochat 可运行入口的实际检查；只有 GPU 数据真实存在时才展示 GPU基线。没有通过门槛的任务按总计划顺延，不能因到10月21日自动打勾。导师邮件、外部发布和上传个人材料不属于今天默认执行内容；本日完成可审阅草稿即可。
+至少展示一个可信 CPU 闭环或明确依赖阻塞，以及 nanochat 可运行入口的实际检查；只有 GPU 数据真实存在时才展示 GPU基线。没有通过门槛的任务按总计划顺延，不能因到10月21日自动打勾。导师邮件、外部发布和上传个人材料不属于今天默认执行内容；本日完成可追溯证据的三分钟介绍和问答即可，讲稿与证据图文件整理可选。
 
 ## 本日脚本与产物清单
 
@@ -132,18 +121,28 @@ nanochat最短入口：命令、模型来源、实际验证设备
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d21_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码人工记入日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 人工追加；跨日复用首次文件 | 人工编写 |
-| `experiments/inference_infra/reports/w3_briefing_v1/d21_project_briefing.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 自动生成骨架，人工完善与验收 |
-| `experiments/inference_infra/reports/w3_briefing_v1/d21_briefing_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 自动生成；文件存在不等于结论通过 |
-| `experiments/inference_infra/reports/d21_w3_gate.md` | 周末四类状态与证据验收 | 第5步 | 人工编写 |
+| `experiments/inference_infra/reports/d21_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
+| `experiments/inference_infra/reports/w3_briefing_v1/d21_project_briefing.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 选择材料脚本后自动生成；口述提纲文件可选 |
+| `experiments/inference_infra/reports/w3_briefing_v1/d21_briefing_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 选择材料脚本后自动生成；文件存在不等于结论通过 |
+| `experiments/inference_infra/reports/d21_w3_gate.md` | 周末四类状态与证据验收 | 第5步交流后自愿整理 | 可选人工笔记，聊天核对可替代 |
+
+## 本日自验证与交流
+
+按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+
+1. 三分钟介绍实际用了多久？用自己的话说清问题、本人贡献和限制；选一项亲自完成及一项只复核的工作，分别给出证据路径。
+2. 沿“模型与输入→raw→统计→下一步优化”逐节点解释状态、对应文件、证明什么和不能证明什么；未做的节点明确 PLANNED/PENDING_GPU。
+3. 为什么 B4 不是四条独立 prompt，TTFT 不等于纯 prefill kernel 时间，有效 token 不能直接用 B×G？指向脚本或原始字段作答。
+4. 5 个样本的 P95 能说明什么？CPU 与 FA3 分别验证到哪一步？尚无加速数字时，你当前实际完成的成果是什么？
+5. 按材料、CPU、GPU、明确失败四类核对 W3：矩阵数量、有效样本和 audit 是否一致？指出仍答不出的追问、资源缺口和下一步检查。
 
 ## 核对记录与完成标记
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。填写实际日志后再勾选：
+本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
 
 - [ ] 输入条件与前一天产物已核实。
 - [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 日志、原始输出与材料保存到所写位置。
+- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
 - [ ] 示例数值与真实结果已区分，失败和待测未删除。
 - [ ] 能说明本日证据证明什么、尚不能证明什么。

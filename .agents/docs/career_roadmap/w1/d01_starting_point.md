@@ -13,7 +13,7 @@ knowledge_scope: W1 D1 起点证据复核
 
 今天只做一件事：用能找到的文件说明你的项目起点。你不是从零开始，也不能把另一个项目的结果移植成 nanochat 的成绩。计划日期沿用 10 月 1 日；实际执行日期请写当天真实日期。
 
-预计 60–90 分钟：10 分钟确认目录，20 分钟核查报告，20 分钟读原始表，20 分钟写起点报告，10 分钟验收。没有 GPU 不影响今天；MiniMind 旧文件缺失时只补对应证据，今天不重跑训练。
+预计 60–90 分钟：10 分钟确认目录，20 分钟核查报告，20 分钟读原始表，20 分钟核验当天问题，10 分钟验收。没有 GPU 不影响今天；MiniMind 旧文件缺失时只补对应证据，今天不重跑训练。
 
 ## 当日脚本与产物清单
 
@@ -26,12 +26,12 @@ knowledge_scope: W1 D1 起点证据复核
 | 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d01_starting_point_inventory.json` | 历史文件存在性、哈希与 CSV 摘要 | `d01_inventory_starting_point.py` | 自动：完成盘点即写入；无匹配证据时退出码 2 仍有 JSON |
-| `experiments/inference_infra/reports/d01_starting_point.md` | 起点结论、证据与缺口 | 第 4 节在编辑器编写 | 人工编写；运行脚本不会生成报告 |
-| `experiments/inference_infra/reports/d01_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/reports/d01_starting_point.md` | 起点结论、证据与缺口 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
+| `experiments/inference_infra/reports/d01_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d01_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d01_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 准备终端与正确解释器
 
@@ -77,49 +77,30 @@ head -n 5 ../minimind/experiments/archive/minimind_baseline-before-embedding-202
 head -n 5 ../minimind/experiments/archive/minimind_baseline-before-embedding-20261014/results/tables/generation_benchmark_raw.csv
 ```
 
-按下面顺序在编辑器做四个批注：
+按下面顺序核对四处证据，可在交流中直接说明：
 
 1. README 的环境栏：设备为 CPU、数值类型 FP32。<abbr title="FP32 / 32-bit Floating Point · 32 位浮点数。这里描述历史训练与正确性实验的数值格式，不代表使用了 GPU。">FP32</abbr> 不等于 CUDA；CPU 也使用它。
 2. D14 表：这是干净 shell 复现，记录了显式解释器与退出码。它证明当时那台机器、那些依赖和数据下可复现；不证明换环境仍直接成功。
 3. KV 表：`cache_token` 与 `no_cache_token` 应逐行一致，`max_abs_logit_diff` 记录同一步最后位置输出的最大绝对差。<abbr title="logits · 模型为词表中每个候选 token 输出的未归一化分数。比较同一前缀最后位置的 logits，可发现仅比较最终文本可能漏掉的数值差异。">logits</abbr> 误差小与生成 token 相同是两条证据，不能只保留后一条。
 4. 原始基准表：查看 `device`、`dtype`、`warmup`、`repetition`。盘点 JSON 中每组应能看到五个正式重复编号。原 D13 有 60 行、12 组；D14 降级矩阵是 20 行、4 组。二者不是互相矛盾，而是矩阵大小不同。
 
-历史报告记录 D12 最大差约 `2.38418579e-06`，小于它选定的 `1e-5` 容差。你的报告应写“历史 CSV 记录”，除非今天重新执行并产生了新日志，不能写“今天复测通过”。<abbr title="KV Cache / Key-Value Cache · 缓存过去 token 的注意力 Key 和 Value。避免每个生成步骤重新计算全部历史，但需要额外缓存存储；它本身不意味着总显存减少。">KV Cache</abbr> 是后续要迁移的理解方式，而不是直接复制实现。
+历史报告记录 D12 最大差约 `2.38418579e-06`，小于它选定的 `1e-5` 容差。交流时应说“历史 CSV 记录”，除非今天重新执行并产生了新日志，不能写“今天复测通过”。<abbr title="KV Cache / Key-Value Cache · 缓存过去 token 的注意力 Key 和 Value。避免每个生成步骤重新计算全部历史，但需要额外缓存存储；它本身不意味着总显存减少。">KV Cache</abbr> 是后续要迁移的理解方式，而不是直接复制实现。
 
-## 4. 写正式起点报告
+## 4. 当天自验证与交流问题
 
 ```bash
 mkdir -p experiments/inference_infra/reports
 ```
 
-在编辑器新建 `experiments/inference_infra/reports/d01_starting_point.md`，按此模板填写。模板里的 `PENDING` 是待完成状态，不能直接替换为 PASS：
+完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d01_starting_point.md` 仅供需要时可选整理，不是必交文件。
 
-```markdown
-# 起点复核
-- 实际执行日期：
-- nanochat commit：
-- MiniMind 证据目录：
-- 本次操作：只读复核 / 另有复测（附命令）
+1. MiniMind 旧证据实际在哪个目录？用盘点 JSON 的存在性与文件路径说明；若没找到，列出查过的位置与缺失项。
+2. 从 README 选一条“已经完成”的声明，你能追到哪份 CSV 或原始日志、哪个字段？它支持什么，又不能证明 nanochat 的什么？
+3. `cache_token`、`no_cache_token` 与 `max_abs_logit_diff` 分别验证什么？对照历史表说明是否逐步一致，明确这是历史记录还是今天复测。
+4. D13 的 60 行/12 组与 D14 的 20 行/4 组为什么不冲突？从实际矩阵与 `repetition` 判断每组重复是否完整。
+5. nanochat 目前的环境、tokenizer/checkpoint、GPU 性能各有什么证据或缺口？哪些只能标待验证，明天先补哪一项？
 
-| 声明 | 文件与具体字段 | 证据状态 | 不能推出的结论 |
-|---|---|---|---|
-| CPU 训练与恢复闭环 | reproduction.md 对应行 | 待核对 | GPU 吞吐、语言质量 |
-| KV 与无缓存逐步一致 | d14_clean_kv_cache.csv | 待核对 | nanochat 缓存已正确 |
-| 重复计时协议已有实践 | benchmark raw 的 repetition | 待核对 | nanochat 加速比 |
-
-## nanochat 本期目标
-可信重复基线 → trace → 受控优化 → 回归与复现。
-
-## 现阶段缺口
-- nanochat 环境运行验证：PENDING
-- nanochat tokenizer / checkpoint：PENDING
-- GPU 性能与算子实验：PENDING_GPU（若无卡）
-
-## 下一步
-完成环境盘点，不重新跑完整 MiniMind 训练。
-```
-
-`trace` 是带时间戳的运行事件记录，用来定位耗时来源；W1 不要求提前产出它。起点报告中的路径要能实际打开，不能只有“已完成”三个字。
+本期方向是“可信重复基线 → trace → 受控优化 → 回归与复现”；`trace` 是带时间戳的运行事件记录，用来定位耗时来源，W1 不要求提前产出。证据路径要能实际打开，状态不能仅写“已完成”。
 
 ## 5. 失败时如何继续
 
@@ -135,9 +116,9 @@ mkdir -p experiments/inference_infra/reports
 
 - [ ] 找到旧证据的真实位置，或写出查找失败的真实原因。
 - [ ] 至少一条结论从 README 追到 CSV 或原始日志。
-- [ ] 起点报告明确 CPU 功能证据、模型质量空白、GPU 性能空白。
+- [ ] 当天回答明确 CPU 功能证据、模型质量空白、GPU 性能空白。
 - [ ] 没有重训、混用权重或创造 nanochat 性能数字。
 
-在报告末尾留当天记录：`实际日期 / commit / 真实用时 / 执行命令 / JSON 路径 / PASS、PARTIAL 或 BLOCKED / 下一步`。PARTIAL 表示完成了部分可核验工作，不是全面通过。
+交流时附实际日期、commit、本次命令与 JSON 路径，说明 PASS、PARTIAL 或 BLOCKED 及下一步。用时可选；PARTIAL 表示部分工作有证据，不是全面通过。
 
 下一篇：[D2 环境盘点](d02_environment_inventory.md)。原路线：[逐日总计划](../nanochat_daily_execution_2026-10-01.md)。

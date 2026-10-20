@@ -33,13 +33,13 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 exec > >(tee -a experiments/inference_infra/reports/d12_session.log) 2>&1
 ```
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。在报告写出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
+解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d12_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时在报告标明会话边界。
+本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d12_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
-今天用 20 分钟读测量边界、25 分钟写协议、20 分钟核对 schema、15 分钟用错误分支验证落盘。前置是 [模型身份记录](d11_checkpoint_generation.md)。即便没有 checkpoint，协议设计和错误行检查仍能完成。
+今天用 20 分钟读测量边界、25 分钟确认协议并交流、20 分钟核对 schema、15 分钟用错误分支验证落盘。前置是 [模型身份记录](d11_checkpoint_generation.md)。即便没有 checkpoint，协议设计和错误行检查仍能完成。
 
 ## 第一步：先定义被测服务与计时范围
 
@@ -51,9 +51,9 @@ exec > >(tee -a experiments/inference_infra/reports/d12_session.log) 2>&1
 
 `elapsed_ms` 等于 TTFT 加所有 decode 间隔，终点为最后一列 yield。脚本收满 G 列立即关闭 generator，避免 Engine 在最后 yield 之后再计算一个无用 forward。CUDA 每个输出边界同步，测得的是带同步开销的流式延迟；以后用事件测纯 kernel 必须分开命名。
 
-## 第二步：写 d12_protocol.md 的固定字段
+## 第二步：确认当天协议并在聊天中交流
 
-创建 `experiments/inference_infra/d12_protocol.md`，填写：
+下面列出本次固定设置与要核对的字段，作为阅读清单；结合实际参数、自动环境字段与文末问题，在聊天中确认协议。缺少的身份或环境信息据实标记未验证，后续可引用本聊天、原始记录与会话日志，不依赖手写文件。`experiments/inference_infra/d12_protocol.md` 仅为可选整理位置：
 
 ```text
 协议版本：1
@@ -94,7 +94,7 @@ GPU驱动补录命令：nvidia-smi（不可用则记录缺失）
 | 可复现 | seed、env、precision、attention_backend、timing_scope、batch_semantics、evidence_scope |
 | 异常 | error；setup失败行允许缺少延迟和环境字段，汇总必须容忍 |
 
-GPU峰值在模型已加载之后重置，allocated仍包含活跃模型内存；reserved是分配器保留值，不是“缓存比无缓存节省显存”。每次重复不清空CUDA allocator，所以reserved可能保留前次状态，此边界写入报告。
+GPU峰值在模型已加载之后重置，allocated仍包含活跃模型内存；reserved是分配器保留值，不是“缓存比无缓存节省显存”。每次重复不清空CUDA allocator，所以reserved可能保留前次状态，交流时说明此边界。
 
 ## 第四步：制造明确的缺失模型错误行
 
@@ -111,7 +111,7 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --mo
 - JSONL不能解析：检查是否把普通终端日志追加到了同一个raw文件；stdout日志与JSONL分开保存。
 - 字段缺失：首先检查status/phase，setup错误缺timing是合法的；ok行缺字段才需修复。
 - G=1：只有TTFT没有后续间隔，TPOT应null；不要除以G或强填0。
-- 验收：protocol边界完整；能用字段说明吞吐与B的关系；错误样例来自真实命令；未运行成功的数据不填入基线表。
+- 验收：聊天中确认的协议边界完整且能由实际参数/自动记录追溯；能用字段说明吞吐与B的关系；错误样例来自真实命令；未运行成功的数据不填入基线表。
 
 ## 今日脚本与产物清单
 
@@ -123,27 +123,24 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --mo
 
 | 产物完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/d12_protocol.md` | 固定工作负载、计时与统计边界 | 第二步 | 人工编写；后续复用仍保留 d12 |
+| `experiments/inference_infra/d12_protocol.md` | 固定工作负载、计时与统计边界 | 第二步 | 可选人工整理；可复用本聊天确认的协议与自动记录，文件若生成仍保留 d12 |
 | `experiments/inference_infra/results/raw/d12_schema_error.jsonl` | 真实错误样例 | d12_benchmark.py | 条件自动；通过参数校验进入实验后写错误行；argparse 错误不写 |
 | `experiments/inference_infra/reports/d12_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
 
-原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有运行、条件不满足、人工未填写的项目均标 PENDING。
+原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 
-## 当天记录与离开前核对
+## 今日自验证与交流问题
 
-把以下模板填写到当天报告末尾；运行命令原样保留，失败也写退出码。`PENDING` 表示没有执行；不要用空值代替失败事实。
+自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
 
-```text
-日期：
-源码 commit / dirty 状态：
-解释器 / 设备 / NANOCHAT_DTYPE：
-NANOCHAT_BASE_DIR：
-实际用时：
-运行命令与退出码：
-原始结果路径：
-已验证的事实：
-未验证或阻塞：
-下一次恢复的第一条命令：
-```
+1. 请按实际脚本说明 TTFT 的起止点及包含/排除的工作：tokenizer、模型加载、cache分配、prefill、复制、采样与同步分别在哪一侧？引用 `measure()` 的相关位置。
 
-记录 commit 使用 `git rev-parse HEAD`，改动状态使用 `git status --short`。共享给别人前检查数据路径和日志是否包含私人信息。只提交本次自己的轻量报告和脚本，不提交权重、数据、环境目录或机器特有缓存。
+2. 给定 P=32/G=8/B=1 与预热3次/正式5次，哪些是本次固定协议？B=4时 prefill 的请求语义是什么，为什么 TPOT 不除以B、吞吐不能重复乘B？
+
+3. 若 G=1，TPOT 应是什么？若 CPU 没测显存，相关字段应是什么？结合字段表解释有效 token、elapsed 与吞吐的单位关系。
+
+4. 缺失模型命令实际退出码和错误行是什么？引用 `d12_schema_error.jsonl` 的 status/phase/error；它验证了什么，为什么不能算成功基线，argparse失败又有什么不同？
+
+5. 后续如何按身份分组、排除预热与失败行并计算 P95？说明 reserved/allocated 的边界和未测条件；协议可在本聊天确认，哪些字段仍缺证据就明确标记。
+
+离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

@@ -15,7 +15,7 @@ knowledge_scope: W1 D3 CPU推理测试及失败定位
 
 今天让“环境看起来装好了”变成“具体测试在这个环境执行过”。预计 60–90 分钟：10 分钟检查依赖，15 分钟首次运行，20 分钟读测试，20 分钟针对失败定位，15 分钟记录。若首次导入/测试较慢，以真实用时为准；不要为满足日历删掉失败用例。
 
-前置：[D2 环境卡](d02_environment_inventory.md)。本轮 Conda 环境已创建；依赖安装完成情况必须由下面命令确认。没有 GPU 走 CPU，不跳过 CPU 验证。
+前置：[D2 环境盘点](d02_environment_inventory.md)。本轮 Conda 环境已创建；依赖安装完成情况必须由下面命令确认。没有 GPU 走 CPU，不跳过 CPU 验证。
 
 ## 当日脚本与产物清单
 
@@ -30,12 +30,12 @@ knowledge_scope: W1 D3 CPU推理测试及失败定位
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log` | 完整测试结果与失败栈 | `d03_run_inference_tests.py` | 自动：启动 pytest 前打开，运行期间写入 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 诊断输出，可为空 | 同上 | 自动：启动 pytest 前打开 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 命令、退出码、用时和 CPU 限制 | 同上 | 条件生成：子进程正常返回后写入；外部中断可能缺失 |
-| `experiments/inference_infra/reports/d03_inference_smoke.md` | 测试解释、skip 和未覆盖范围 | 第 5 节在编辑器编写 | 人工编写 |
-| `experiments/inference_infra/reports/d03_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/reports/d03_inference_smoke.md` | 测试解释、skip 和未覆盖范围 | 第 5 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
+| `experiments/inference_infra/reports/d03_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d03_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d03_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 检查同一解释器内的依赖
 
@@ -75,7 +75,7 @@ sed -n '15,130p' tests/test_engine.py
 rg -n 'skipif|HAS_FA3|DEVICE|DTYPE|test_override_auto' tests/test_attention_fallback.py
 ```
 
-按这条阅读顺序做笔记：
+按这条阅读顺序理解，可直接在聊天中说明：
 
 1. `MockModel` 返回均匀分数，`ByteTokenizer` 用字节和少量特殊 token 模拟分词。<abbr title="mock · 测试替身。用受控的简单对象隔离一个组件，例如检验生成控制流而无需真实权重。通过 mock 测试不能说明真实 GPT 数值计算已正确。">mock 测试</abbr> 用于隔离 Engine 控制流。
 2. `test_kv_cache_basic` 检查形状、推进和 reset；`test_kv_cache_prefill` 检查复制。写清“验证缓存容器”，不要写“真实模型 KV 等价已证明”。
@@ -83,7 +83,7 @@ rg -n 'skipif|HAS_FA3|DEVICE|DTYPE|test_override_auto' tests/test_attention_fall
 4. `TestSDPAOnly` 在可用设备执行基础前向、反向和缓存操作。当前脚本隐藏 CUDA，因此它选 CPU。
 5. FA3 对照测试有硬件/内核条件，CPU 上跳过符合预期。<abbr title="SDPA / Scaled Dot Product Attention · 缩放点积注意力接口。这里由 PyTorch 执行回退计算，CPU 路线验证的是该分支，不是 FA3 内核。">SDPA</abbr> 成功不能替代 FA3 对照。
 
-留一个三列表：`测试组 / 这组证明什么 / 仍未证明什么`。真实 GPT 的缓存数值与 smear 状态在 D5 的小模型探查中补充。
+对每组测试确认“证明什么、仍未证明什么”，可直接口述，不要求另做表格。真实 GPT 的缓存数值与 smear 状态在 D5 的小模型探查中补充。
 
 ## 4. 失败分类后只重跑相关用例
 
@@ -104,26 +104,18 @@ python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --selec
 
 `--select` 是 pytest 的名字表达式。定向通过只说明筛选后的用例通过；最终仍需完整两文件运行。现有 `test_override_auto` 用 `USE_FA3 == HAS_FA3` 作为断言，而生产路由还看 compute dtype；未来在有 FA3 且强制 FP32 的机器运行时，应按源码核实这一测试假设，不能盲目认定是内核坏了。当前 CPU 隔离下这两个值都应为 false。
 
-## 5. 写测试小结并验收
+## 5. 当天自验证与交流问题并验收
 
-新建 `experiments/inference_infra/reports/d03_inference_smoke.md`：
+完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d03_inference_smoke.md` 仅供需要时可选整理，不是必交文件。
 
-```markdown
-# CPU 推理测试
-- 实际日期 / commit / Python：
-- 原始日志目录：
-- 原始 argv / exit_code：
-- 实际摘要：passed / skipped / failed / errors
-- 第一个失败（若有）：环境 / 依赖 / 行为 / 未分类
-- 解决动作与定向重跑证据：
-- 完整重跑证据：
-- 已覆盖：
-- 未覆盖：FA3、真实 checkpoint 等
-- 结论：PASS_CPU / BLOCKED_ENV / FAIL_BEHAVIOR
-```
+1. 本次完整两文件测试的精确命令、退出码与 passed/skipped/failed/errors 各是什么？提供 `Logs:` 实际目录及 `d03_run.json`，不要引用教程历史数字。
+2. 选一个缓存容器测试，它断言了什么？为什么 `MockModel`/`ByteTokenizer` 通过不能证明真实 GPT 的缓存数值等价？指出对应测试函数。
+3. 多样本首 token 多样性、固定 seed 复现、温度为零分别验证哪种性质？结合断言说明，不能只说“采样正确”。
+4. 本次哪些测试跳过，具体缺什么条件？CPU SDPA 通过后，FA3 与真实 checkpoint 还缺哪些验证？
+5. 如果失败，最早失败属于依赖、环境还是行为？给出原始栈与定向重跑证据；若定向已过，是否又完整运行两文件？未重跑就明确未验收。
 
 验收要求：有精确命令与退出码；理解 mock 与真实模型区别；明确 skip；没有把未运行当 PASS。失败未解决也要保留可复查日志，然后按依赖阻塞继续读源码，不能进入“性能已通过”状态。
 
-追加当天记录：`实际日期 / commit / 用时 / 命令 / 日志目录 / 状态 / 下一步`。
+交流时附实际日期、commit、命令、原始日志目录、状态与下一步；用时可选，不需再手抄自动记录。
 
 上一篇：[D2 环境盘点](d02_environment_inventory.md)。下一篇：[D4 模型与形状](d04_model_shapes.md)。

@@ -13,9 +13,9 @@ knowledge_scope: W1 D2 Conda环境与硬件事实盘点
 
 # W1 D2：记录真正运行实验的环境
 
-今天产出环境卡片，不追求模型跑得快。你需要能回答“用哪个 Python、哪个源码版本、什么设备运行”，并让另一人知道缺什么。预计 60–75 分钟：10 分钟激活环境，15 分钟采集，20 分钟解释字段，15 分钟写 `d02_env.md`，最后 10 分钟核对。
+今天自动采集环境事实，不追求模型跑得快。你需要能回答“用哪个 Python、哪个源码版本、什么设备运行”，并让另一人知道缺什么。预计 60–75 分钟：10 分钟激活环境，15 分钟采集，20 分钟解释字段，15 分钟回答当天问题，最后 10 分钟核对。
 
-前置：[D1 起点报告](d01_starting_point.md)。没有 GPU 可完成全部盘点；网络不可用时保留已有环境，不反复下载。
+前置：[D1 起点复核](d01_starting_point.md)。没有 GPU 可完成全部盘点；网络不可用时保留已有环境，不反复下载。
 
 ## 当日脚本与产物清单
 
@@ -28,12 +28,12 @@ knowledge_scope: W1 D2 Conda环境与硬件事实盘点
 | 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d02_environment.json` | 本次环境原始事实 | `d02_inspect_environment.py` | 自动：正常完成采集后写入 |
-| `experiments/inference_infra/d02_env.md` | 环境卡及运行范围 | 第 4 节在编辑器编写 | 人工编写 |
-| `experiments/inference_infra/reports/d02_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/d02_env.md` | 环境卡及运行范围 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
+| `experiments/inference_infra/reports/d02_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d02_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d02_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 固定解释器，不另建虚拟环境
 
@@ -64,7 +64,7 @@ python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py
 
 逐项阅读 JSON：
 
-| 字段 | 如何理解 | 应写入环境报告的内容 |
+| 字段 | 如何理解 | 交流时核对的内容 |
 |---|---|---|
 | `git_head.stdout` | 当前提交标识 | 完整 commit；不要把分支名当不可变版本 |
 | `git_status.stdout` | 提交之外的工作区变化 | 哪些是原有改动、哪些是自己产物 |
@@ -75,7 +75,7 @@ python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py
 | `cuda_available` | 该进程能否使用 CUDA | false 不能做 GPU 基准 |
 | `nvidia_smi` | 外部驱动工具的可见信息 | 缺命令与无 GPU 分开记录 |
 
-<abbr title="CUDA · NVIDIA GPU 的计算运行环境。PyTorch 是否编译了 CUDA、驱动是否可见、当前进程能否分配 GPU 张量是不同条件。CPU 版 PyTorch 即使运行在带卡机器上也不能进行 CUDA 计时。">CUDA</abbr> 可用性必须来自这次进程，不能依据买过显卡或主机型号判断。`nvidia-smi` 不在 PATH 也不能单独证明物理机器无卡。JSON 中的 `recorded_at` 是 UTC 时间戳，报告的实际执行日期按本地 Asia/Shanghai 填写。
+<abbr title="CUDA · NVIDIA GPU 的计算运行环境。PyTorch 是否编译了 CUDA、驱动是否可见、当前进程能否分配 GPU 张量是不同条件。CPU 版 PyTorch 即使运行在带卡机器上也不能进行 CUDA 计时。">CUDA</abbr> 可用性必须来自这次进程，不能依据买过显卡或主机型号判断。`nvidia-smi` 不在 PATH 也不能单独证明物理机器无卡。JSON 中的 `recorded_at` 是 UTC 时间戳，交流时的实际执行日期按本地 Asia/Shanghai 填写。
 
 ## 3. 核对项目依赖和数据根目录
 
@@ -102,28 +102,17 @@ uv export --help
 python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_BASE_DIR", str(Path.home()/".cache/nanochat"))); print(p); print("exists:",p.exists())'
 ```
 
-不要今天就批量下载数据。环境卡只登记 tokenizer、parquet 语料、checkpoint 的候选根路径；是否完整由 W2 专门核查。大文件存储位置与正式文本报告位置分开，`/tmp` 用于缓存和临时验证，不适合保存唯一 checkpoint。
+不要今天就批量下载数据。交流时只需说明 tokenizer、parquet 语料、checkpoint 的候选根路径；是否完整由 W2 专门核查。大文件存储位置与自动结果、可选记录的位置分开，`/tmp` 用于缓存和临时验证，不适合保存唯一 checkpoint。
 
-## 4. 写正式环境卡
+## 4. 当天自验证与交流问题
 
-新建 `experiments/inference_infra/d02_env.md`：
+完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/d02_env.md` 仅供需要时可选整理，不是必交文件。
 
-```markdown
-# 实验环境
-- 实际采集日期与时区：
-- 源码 commit / dirty 项：
-- Python 路径与版本：
-- Conda 环境：nanochat
-- 依赖安装状态：INSTALLING / COMPLETE / BLOCKED
-- PyTorch 版本 / CUDA build / 当前 CUDA available：
-- GPU 名称、驱动、显存：N/A 或真实值
-- uv / pytest / kernels：
-- 本次盘点 JSON：experiments/inference_infra/results/w1/d02_environment.json
-- NANOCHAT_BASE_DIR 实际值或默认展开路径：
-- tokenizer / 数据 / checkpoint 候选路径：尚未核验
-- 可执行范围：CPU 盘点 / CPU 模型 / CUDA（逐项标状态）
-- 仍缺条件、原始错误、下一步：
-```
+1. 这次脚本真正用了哪个 Python 和 Conda 环境？从 JSON 的 `python`、`conda_prefix` 与终端路径交叉确认，是否混入其他环境？
+2. 当前 commit 与工作区改动是什么？对照 `git_head.stdout`、`git_status.stdout`，哪些会影响后续实验复现？
+3. PyTorch 包版本存在是否就能运行？结合 `packages`、`torch_runtime.exit_code` 和 stderr 说明本次导入结果、失败原因或未完成安装项。
+4. `cuda_build`、`cuda_available`、`nvidia_smi` 各证明什么？依据本次采集判定 CPU/GPU 可执行范围，不把工具缺失等同于物理无卡。
+5. `NANOCHAT_BASE_DIR` 的实际展开路径是什么？tokenizer、语料、checkpoint 哪些仅有候选位置、哪些尚未核验？D3 的 CPU 测试条件是否齐备？
 
 <abbr title="dirty worktree · Git 工作区包含尚未提交的改动。记录它是为了说明实际执行源码可能不只由 commit 决定，不表示应清空这些改动。">dirty 状态</abbr> 需要可追溯；只写一个 commit 而隐藏源码改动会让后续性能对比无法复现。
 
@@ -132,9 +121,9 @@ python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_
 - Python 不对：重新 source 与 activate，再执行脚本，不继续拿其他项目环境的数据填卡。
 - 包元数据显示版本，导入却失败：读 `torch_runtime.stderr`，这是动态库或安装完整性问题，不能判为可运行。
 - torch 缺失：等依赖安装完成或记录 BLOCKED；标准库盘点仍算完成，模型验收仍未完成。
-- 无 CUDA：在环境卡写 CPU 路线可继续，GPU 项 `PENDING_GPU`；明天执行 CPU 测试。
+- 无 CUDA：交流时说明 CPU 路线可继续，GPU 项 `PENDING_GPU`；明天执行 CPU 测试。
 - 输出目录不可写：可先传 `--output /tmp/nanochat_d02_environment.json` 验证脚本，正式证据最终迁回实验目录并登记实际路径。
 
-结束时勾选：解释器正确、commit/dirty 已留存、版本为实际值、驱动与 CUDA runtime 不混淆、缺项有原因、环境卡能链接到原始 JSON。追加当天记录：`实际日期 / commit / 用时 / 命令 / 文件 / 状态 / D3 待办`。
+结束时核对解释器、commit/dirty、实际版本、驱动与 CUDA runtime 的区别和缺项原因；交流附原始 JSON 路径与实际日期、命令、状态及 D3 待办，无需另写环境卡，用时可选。
 
 上一篇：[D1 起点复核](d01_starting_point.md)。下一篇：[D3 推理测试](d03_inference_smoke.md)。

@@ -33,9 +33,9 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 exec > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
 ```
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。在报告写出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
+解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d11_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时在报告标明会话边界。
+本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d11_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -73,23 +73,14 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 
 ## 第三步：冻结身份而不是只记 d4
 
-在 `experiments/inference_infra/reports/d11_checkpoint_manifest.md` 按下面模板记录。读取 metadata 可用标准库，命令里的路径需与真实标签一致：
+模型身份由下面的自动日志与生成 JSON 提供，直接在聊天中回答文末问题即可。`experiments/inference_infra/reports/d11_checkpoint_manifest.md` 可选整理；不需要另填模板。读取 metadata 可用标准库，命令里的路径需与真实标签一致：
 
 ```bash
 python -m json.tool "$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/meta_000020.json" > experiments/inference_infra/reports/d11_checkpoint_identity.log 2>&1
 sha256sum "$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/model_000020.pt" "$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl" >> experiments/inference_infra/reports/d11_checkpoint_identity.log 2>&1
 ```
 
-```text
-模型来源：nanochat base_train；synthetic-smoke / real-corpus（据实选）
-标签与step：d11_w2_20 / 20
-模型绝对路径与SHA256：
-tokenizer绝对路径与SHA256：
-model_config：
-训练命令、退出码、日志：
-双路径JSON、共同前缀是否通过：
-未证明：模型质量、GPU性能、逐步logits误差、所有cache状态正确性
-```
+交流时核对来源是 synthetic-smoke 还是 real-corpus，并把标签/step、路径/hash、配置、训练退出码与双路径结果对应起来。模型质量、GPU性能、逐步logits误差和所有cache状态正确性仍需分别验证。
 
 脚本和生产 loader 只检查 vocab_size 一致，不能证明 ID 到文本语义一致；因此 tokenizer hash 必须与训练时记录配对。后续运行 benchmark 将自动记录权重、metadata、tokenizer 三项 hash。
 
@@ -98,7 +89,7 @@ model_config：
 - 找不到 `meta_000020.json`：检查是否执行了20步、标签是否相同、变量是否指向另一个缓存根。
 - vocab mismatch：停止换 tokenizer；找回训练时那份，不能修改 metadata 的 vocab_size 硬凑。
 - prefix mismatch：保存两个 ID 序列与首个差异位置，检查 dtype、后端、工具/终止行为；不要通过删掉不一样的 token 让测试变绿。
-- 无可用训练数据：仍可在后天使用 `d12_benchmark.py --random-model` 验证接口；manifest 继续 `PENDING_CHECKPOINT`，不能说已有训练模型。
+- 无可用训练数据：仍可在后天使用 `d12_benchmark.py --random-model` 验证接口；交流中将模型身份状态标为 `PENDING_CHECKPOINT`，不能说已有训练模型。
 - 验收：二十步退出码0、checkpoint可加载、相同 prompt 的两条路径记录完整、来源/hash/config可复查。
 
 ## 今日脚本与产物清单
@@ -118,10 +109,10 @@ model_config：
 | `experiments/inference_infra/reports/d11_train_smoke_20/d11_train.log` | 二十步训练 stdout/stderr | d10_train_smoke.py --steps 20 | 条件自动；执行训练后创建 |
 | `experiments/inference_infra/reports/d11_checkpoint_generation_20.json` | step 20 双路径结果 | d10_checkpoint_probe.py | 条件自动；执行 probe 后写出 |
 | `experiments/inference_infra/reports/d11_checkpoint_identity.log` | metadata 展开与 SHA256 输出 | 第三步重定向命令 | 条件自动；运行命令时保存，读取失败也留日志 |
-| `experiments/inference_infra/reports/d11_checkpoint_manifest.md` | 冻结模型与 tokenizer 身份 | 第三步 | 人工编写 |
+| `experiments/inference_infra/reports/d11_checkpoint_manifest.md` | 冻结模型与 tokenizer 身份 | 第三步 | 可选人工整理；可直接在聊天中回答本日问题 |
 | `experiments/inference_infra/reports/d11_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
 
-权重位于仓库外；以下是当前 `NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy` 时的完整绝对路径。使用自定义数据根时把真实绝对路径逐项写进报告。仅真实训练保存阶段执行后生成；训练中断时不可宣称齐全：
+权重位于仓库外；以下是当前 `NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy` 时的完整绝对路径。使用自定义数据根时在交流中逐项提供真实绝对路径。仅真实训练保存阶段执行后生成；训练中断时不可宣称齐全：
 
 | 完整绝对路径（示例数据根） | 用途 | 生成者与方式 |
 |---|---|---|
@@ -129,23 +120,20 @@ model_config：
 | `/tmp/nanochat-w2-toy/base_checkpoints/d11_w2_20/meta_000020.json` | 配置与训练状态 | scripts/base_train.py → nanochat/checkpoint_manager.py；条件自动 |
 | `/tmp/nanochat-w2-toy/base_checkpoints/d11_w2_20/optim_000020_rank0.pt` | 单进程优化器状态 | scripts/base_train.py → nanochat/checkpoint_manager.py；条件自动 |
 
-原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有运行、条件不满足、人工未填写的项目均标 PENDING。
+原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 
-## 当天记录与离开前核对
+## 今日自验证与交流问题
 
-把以下模板填写到当天报告末尾；运行命令原样保留，失败也写退出码。`PENDING` 表示没有执行；不要用空值代替失败事实。
+自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
 
-```text
-日期：
-源码 commit / dirty 状态：
-解释器 / 设备 / NANOCHAT_DTYPE：
-NANOCHAT_BASE_DIR：
-实际用时：
-运行命令与退出码：
-原始结果路径：
-已验证的事实：
-未验证或阻塞：
-下一次恢复的第一条命令：
-```
+1. 这次二十步训练为什么属于从头训练，而非从 step2 恢复？引用实际计划、标签与日志，说明步数和返回码是否符合预期。
 
-记录 commit 使用 `git rev-parse HEAD`，改动状态使用 `git status --short`。共享给别人前检查数据路径和日志是否包含私人信息。只提交本次自己的轻量报告和脚本，不提交权重、数据、环境目录或机器特有缓存。
+2. 从 `d11_checkpoint_identity.log` 与生成 JSON 中指出权重/tokenizer 的实际路径、hash、step及关键模型配置；只有 vocab_size 一致为什么不足以确认 ID 语义配对？
+
+3. 同一个 prompt 的 reference_ids 与 engine_ids 是否共同前缀匹配？引用 JSON 中的 ID 或首个差异位置，说明终止行为为什么可能导致列表长度不同。
+
+4. 两条生成路径如何分别计算历史前缀？KV Cache 中除 K/V 外还要维护什么状态，为什么 greedy token 相同不能证明逐步 logits 或所有缓存状态都正确？
+
+5. 本日哪些结论来自真实训练，哪些只是接口检查？缺 checkpoint、前缀不匹配或没有 GPU 时，分别保留什么证据、标记什么未验证项，下一步如何分流？
+
+离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

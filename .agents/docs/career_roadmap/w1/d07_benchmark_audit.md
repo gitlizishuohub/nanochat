@@ -16,7 +16,7 @@ knowledge_scope: W1 D7 基准边界审计与周验收
 
 # W1 D7：审计现有基准，冻结下一周要修的测量契约
 
-今天不是立刻跑一组数字，而是明确原入口能测什么、还缺什么。预计 75–90 分钟：20 分钟依赖与输入，25 分钟计时边界，20 分钟统计问题，15 分钟报告，10 分钟 W1 口述验收。无 GPU/权重时照常完成静态审计，GPU 运行标待完成。
+今天不是立刻跑一组数字，而是明确原入口能测什么、还缺什么。预计 75–90 分钟：20 分钟依赖与输入，25 分钟计时边界，20 分钟统计问题，15 分钟核验问题，10 分钟 W1 口述验收。无 GPU/权重时照常完成静态审计，GPU 运行标待完成。
 
 前置：[D4 模型路径](d04_model_shapes.md)、[D5 缓存](d05_cache_lifecycle.md)、[D6 后端](d06_attention_backends.md)。这三份是理解测量的必要背景。
 
@@ -32,17 +32,17 @@ knowledge_scope: W1 D7 基准边界审计与周验收
 
 | 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d07_benchmark_audit.md` | 计时契约差距和 W1 验收 | 第 5–6 节在编辑器编写 | 人工编写；静态审计不产生性能 CSV、图片或权重 |
+| `experiments/inference_infra/reports/d07_benchmark_audit.md` | 计时契约差距和 W1 验收 | 第 5–6 节问答可选整理 | 可选人工整理；静态审计不产生性能 CSV、图片或权重 |
 | `experiments/inference_infra/results/w1/d04_shapes_probe.json` | 可选补充 shapes 证据 | 复用 `d04_probe_model_and_cache.py --mode shapes` | 仅执行该模式且断言通过时自动生成/覆盖 |
 | `experiments/inference_infra/results/w1/d05_cache_probe.json` | 可选补充 cache 证据 | 复用 `d04_probe_model_and_cache.py --mode cache` | 仅执行该模式且断言通过时自动生成/覆盖 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log` | 可选补测 stdout | 复用 `d03_run_inference_tests.py` | 仅运行补测时自动生成 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 可选补测 stderr | 同上 | 仅运行补测时自动生成，可为空 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 可选补测元数据 | 同上 | 仅补测子进程正常返回后自动生成 |
-| `experiments/inference_infra/reports/d07_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/reports/d07_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d07_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 测试输出由清单中的 stdout/stderr 日志捕获。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d07_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 从 main 的前置条件开始
 
@@ -106,7 +106,7 @@ sed -n '205,315p' nanochat/engine.py
 sed -n '215,310p' scripts/infer_bench.py
 ```
 
-对照总计划硬门槛写差异表：
+对照下面差异表核验总计划硬门槛，可直接说明缺口：
 
 | 项目 | 原入口行为 | W2 要补的契约 |
 |---|---|---|
@@ -123,30 +123,22 @@ sed -n '215,310p' scripts/infer_bench.py
 
 `P+G<=sequence_len` 是计划使用的安全契约；源码还会 clamp P，负/零长度的输入不能靠 clamp 自动修好。不能把 requested P=512 的截短运行仍记作 512 组。
 
-## 5. 写审计报告，不编造性能结果
+## 5. 当天自验证与交流问题
 
-新建 `experiments/inference_infra/reports/d07_benchmark_audit.md`：
+完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d07_benchmark_audit.md` 仅供需要时可选整理，不是必交文件。
 
-```markdown
-# 原始基准审计
-- 实际日期 / commit / 阅读源码版本：
-- 执行状态：仅静态审计 / 另有运行日志
-- checkpoint 与 tokenizer 前置条件：
-- TTFT开始、结束、包含与排除：
-- TPOT当前定义与偶数样本处理：
-- 吞吐分子/分母及有效token局限：
-- warmup / repeats 缺口：
-- 自动截短、结束token、工具token、末尾forward边界：
-- raw schema 需补字段：
-- GPU测量状态：PENDING_GPU 或真实日志
-- W2唯一主目标：合法输入与权重 + 自动重复原始数据
-```
+1. 原基准入口要满足哪些 CUDA、进程、checkpoint 与 tokenizer 条件？哪些已由真实证据确认，哪些还阻塞？只静态阅读就明确未运行。
+2. 对照源码划出 TTFT 起止：加载模型、分词、创建生成器、缓存分配、批量复制、首 token 采样哪些在计时内？为什么变量名 `prefill_time` 不能当纯 attention 时间？
+3. 生成 G 个 token 为什么通常只有 G-1 个后续 decode step？原 TPOT 在偶数步数时怎样取中间项，与五次独立运行统计有什么不同？
+4. 吞吐分子/分母是什么？提前结束行、tool mask=0、发现 StopIteration 前的额外 forward 各会造成什么统计边界问题？指出对应源码。
+5. 对照第 4 节差异表，W2 在 warmup/repeats、requested/actual P、有效 token、错误记录和峰值显存定义上要补什么？选一组 P/G 说明合法条件与截短风险。
+6. 你今天有哪些结论仅来自静态审计，哪些另有 CPU/GPU 运行证据？给出对应路径或函数位置，并明确仍未测量的性能项与 W2 首要目标。
 
 今天审计没有必须新增的 GPU 实验脚本，因为 W2 会提供真正重复测量入口。需补 CPU 证据时直接用[真实小模型探查](scripts/d04_probe_model_and_cache.py)或[测试捕获](scripts/d03_run_inference_tests.py)，不要另写一个冒充 GPU 的计时脚本。
 
 ## 6. W1 gate：用五分钟口述检验自己
 
-合上源码，逐条回答并在报告写“能解释 / 需补读”：
+合上源码，逐条口述或直接在聊天中回答“能解释 / 需补读”，再打开源码核验：
 
 1. 无缓存 GPT.generate 为什么每步处理越来越长的前缀？
 2. Engine 第一 token 为什么只需要一次 B=1 prefill，再扩到 B 个样本？
@@ -155,8 +147,8 @@ sed -n '215,310p' scripts/infer_bench.py
 5. 现有 TTFT 是否包括 tokenizer、KV 分配和批量复制？
 6. 为什么一次正式运行以及五个 decode step 都不等于五次独立重复？
 
-W1 最低完成物为各日清单中的起点报告、环境卡、测试日志、模型路径报告、缓存路径报告、后端报告和基准审计报告；逐一按其完整项目相对路径核对。没有执行的模型/测试明确标 BLOCKED，不能因文档齐全就把运行门槛判通过。
+W1 最低完成要求是各日特定问题已有回答，以及所执行检查的 JSON、测试日志等原始证据可打开；可直接引用聊天回答和自动结果路径，所有人工 Markdown 报告均可选。没有执行的模型/测试明确标 BLOCKED，不能因文档齐全就把运行门槛判通过。
 
-报告末尾更新本周四项：完成物、可打开的证据路径、最大阻塞、下一周单一目标。另记真实日期、commit、用时、命令、状态。下一周先做 tokenizer/数据检查，再准备合法 nanochat checkpoint，不直接跳到性能加速。
+交流本周四项：已验证内容、可打开的证据路径、最大阻塞、下一周单一目标。附真实日期、commit、实际命令与状态；用时可选。下一周先做 tokenizer/数据检查，再准备合法 nanochat checkpoint，不直接跳到性能加速。
 
 上一篇：[D6 后端路由](d06_attention_backends.md)。下一阶段：[W2 D1 数据前置核查](../w2/d08_data_prerequisites.md)。

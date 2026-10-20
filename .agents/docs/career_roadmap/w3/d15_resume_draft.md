@@ -31,24 +31,13 @@ exec > >(tee -a experiments/inference_infra/reports/d15_checks.log) 2>&1
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
 
-在 `experiments/inference_infra/reports/d15_experiment-log.md` 末尾追加当天日志，记录实际执行日期；标题里的 W3 Dn 是学习顺序，补做时不能倒填为此前已完成。
-
-```text
-学习槽位：W3 / 当日标题编号
-实际开始与结束：
-解释器、git commit、相关源码是否有未提交改动：
-命令（完整参数）与退出码：
-输入来源 / 产物路径：
-观察到的事实：
-尚未验证 / 阻塞原因：
-下一步 / 下次检查时间：
-```
+本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
 
 ## 今天要留下什么（约 2–3 小时）
 
-今天先做求职材料，不等待 GPU。交付一份可编辑的一页中文简历草稿和证据清单；没有本人教育、联系方式或贡献范围时保留待填，不从目录名猜学校、年级或履历。把材料读给一个没有看过项目的人，应该能分清已完成工作、正在做的实验和计划中的优化。
+今天先做求职材料，不等待 GPU。练习形成一页中文简历初稿和证据对应关系；可先在聊天逐条核对事实，再按需整理可编辑稿；没有本人教育、联系方式或贡献范围时保留待填，不从目录名猜学校、年级或履历。把材料读给一个没有看过项目的人，应该能分清已完成工作、正在做的实验和计划中的优化。
 
-时间分配：30 分钟核对证据，40 分钟填写事实，40 分钟压缩一页，20 分钟逐句反查。前置是完成 W1 的起点核查；W2 尚未完成时，nanochat 一栏明确写“进行中”。
+时间分配：30 分钟核对证据，40 分钟交流贡献表述，40 分钟试着压缩一页，20 分钟逐句反查；正式排版与报告整理可选。前置是完成 W1 的起点核查；W2 尚未完成时，nanochat 一栏明确写“进行中”。
 
 ## 第一步：找到归档后的真实 MiniMind 证据
 
@@ -67,7 +56,7 @@ head -n 5 "$MM_ARCHIVE/results/tables/generation_benchmark_raw.csv"
 
 ## 第二步：生成可填写草稿与文件存在性清单
 
-使用[材料准备脚本](scripts/d15_prepare_materials.py)，它只写新模板和证据哈希，不替你验证能力或贡献。
+需要整理为文件时，可选使用[材料准备脚本](scripts/d15_prepare_materials.py)；直接聊天核对也可以。它只写新模板和证据哈希，不替你验证能力或贡献。
 
 ```bash
 python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
@@ -76,7 +65,7 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
   --evidence "$MM_ARCHIVE/results/tables/kv_cache.csv"
 ```
 
-打开生成的 `d15_resume_draft.md`。按教育、MiniMind、nanochat、技能四部分逐项填写，删除不适用字段。<abbr title="SHA-256 · 文件内容摘要算法；本处用于辨认核查的是哪个文件版本，不证明其中的实验结论正确。">SHA-256</abbr> 只是文件指纹；`experiments/inference_infra/reports/w3_resume_v1/d15_resume_evidence_inventory.json` 的 `exists: true` 不等于所有实验通过。无效路径会保留 `exists: false`，应人工检查，不隐藏。
+脚本可选用于整理简历；未使用时可直接在聊天按教育、MiniMind、nanochat、技能四部分核对初稿与证据。采用文件草稿时打开生成的 `d15_resume_draft.md`，逐项填写并删除不适用字段。<abbr title="SHA-256 · 文件内容摘要算法；本处用于辨认核查的是哪个文件版本，不证明其中的实验结论正确。">SHA-256</abbr> 只是文件指纹；`experiments/inference_infra/reports/w3_resume_v1/d15_resume_evidence_inventory.json` 的 `exists: true` 不等于所有实验通过。无效路径会保留 `exists: false`，应人工检查，不隐藏。
 
 ## 第三步：逐条重写成可追问的贡献
 
@@ -86,7 +75,7 @@ nanochat 目前只完成源码阅读时写“梳理 Engine 预填充与解码路
 
 建议教育 3–4 行、每个项目 3 条、技能 2 行；每条保留一个可解释事实。不要把上游 README 的训练成本、能力分数或机器配置写成本人成绩。
 
-## 第四步：检查一页和导出
+## 第四步：按需检查一页和导出（可选）
 
 先用编辑器 Markdown 预览检查标题、超长路径和换行；有现成浏览器打印功能时选择“打印 → 另存为 PDF”，纸张 A4，关闭页眉页脚，再看是否一页。没有现成导出器时保留可编辑文档即可，不为今天强制安装排版工具。导出之后打开 PDF 核对中文字体、链接、页数，只有真的生成并打开过才记录 PDF 已验收。
 
@@ -96,7 +85,7 @@ nanochat 目前只完成源码阅读时写“梳理 Engine 预填充与解码路
 - 材料太长：删重复技术栈与日程描述；不要删去设备与工作阶段来制造成绩。
 - 不知道某条能否写：回到证据原文，分清“亲自完成 / 阅读复核 / 待做”。
 
-验收：每个成绩有对应文件与行；没有未测量的加速比；教育和联系方式已本人核对或保留待填；一页可编辑稿存在。下一天冻结基线条件，以后简历更新只能从真实原始数据提取。
+验收：每个成绩有对应文件与行；没有未测量的加速比；教育和联系方式已本人核对或保留待填；能给出可追问的简历初稿内容；一页可编辑稿和 PDF 可在需要投递时整理。下一天冻结基线条件，以后简历更新只能从真实原始数据提取。
 
 ## 本日脚本与产物清单
 
@@ -108,18 +97,27 @@ nanochat 目前只完成源码阅读时写“梳理 Engine 预填充与解码路
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d15_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码人工记入日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 人工追加；跨日复用首次文件 | 人工编写 |
-| `experiments/inference_infra/reports/w3_resume_v1/d15_resume_draft.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 自动生成骨架，人工完善与验收 |
-| `experiments/inference_infra/reports/w3_resume_v1/d15_resume_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 自动生成；文件存在不等于结论通过 |
+| `experiments/inference_infra/reports/d15_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
+| `experiments/inference_infra/reports/w3_resume_v1/d15_resume_draft.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 选择材料脚本后自动生成；正式文件整理可选，先核对内容 |
+| `experiments/inference_infra/reports/w3_resume_v1/d15_resume_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 选择材料脚本后自动生成；文件存在不等于结论通过 |
 | `experiments/inference_infra/reports/w3_resume_v1/d15_resume_draft.pdf` | 一页简历导出 | 编辑器或浏览器打印导出 | 人工导出；可选，未导出不得称存在 |
+
+## 本日自验证与交流
+
+按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+
+1. 从简历或口头初稿中选一条 MiniMind 成绩：对应哪个归档文件、哪一行？设备和源码版本是什么，归档结果能否证明当前源码也通过？
+2. 哪些工作是你亲自完成，哪些只是阅读复核？分别给出一句准确的贡献表述，并指出支持它的日志或原始记录。
+3. nanochat 当前能写到哪个阶段？检查是否出现未经实测的 GPU 性能、加速比或上游成绩，说明你删改了哪句话及理由。
+4. 本人信息、证据或一页排版还有哪些未核对？直接说待填或未验证；PDF 未导出时不算已有产物。
 
 ## 核对记录与完成标记
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。填写实际日志后再勾选：
+本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
 
 - [ ] 输入条件与前一天产物已核实。
 - [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 日志、原始输出与材料保存到所写位置。
+- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
 - [ ] 示例数值与真实结果已区分，失败和待测未删除。
 - [ ] 能说明本日证据证明什么、尚不能证明什么。

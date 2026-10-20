@@ -6,7 +6,7 @@
 
 ## feedback
 
-- [career-roadmap-guides](career-roadmap-guides.md) — W1–W3 每日教程采用正文直链每周 scripts，不增加周 README。
+- [career-roadmap-guides](career-roadmap-guides.md) — W1–W3 教程直链每周 scripts；每日专属问题供自验证后聊天交流，手写报告可选。
 - [docs-diagrams](docs-diagrams.md) — 文档图示先核对技能要求，同时检查连接线、箭头对比度和布局。
 
 ## project

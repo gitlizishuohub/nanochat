@@ -33,9 +33,9 @@ mkdir -p experiments/inference_infra/reports experiments/inference_infra/results
 exec > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ```
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。在报告写出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
+解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d10_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时在报告标明会话边界。
+本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d10_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -102,7 +102,7 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 - CPU 过慢：先保留日志，确认是模型构建、torch 编译还是数据 iterator；不要后台开多个训练进程。长于今日时间盒就记录 `TRAINING_PENDING`，下次续查。
 - OOM：停止同机重复进程，核对当前 batch 与 dtype；不能把失败改成“默认已通过”。GPU 模式必须使用对应 Conda 的 GPU PyTorch；本教程不替你切换安装。
 - loss 非有限值：保存日志与配置，停止往后扩步；先检查 tokenizer ID、学习率和精度，别只换 checkpoint 标签反复碰运气。
-- 验收：计划的实际退出码0、三个保存文件对应 step2、probe `status=ok`；在 `experiments/inference_infra/reports/d10_training_smoke.md` 记录路径和配置。若任一失败，写明门槛未过，二十步训练暂缓。
+- 验收：计划的实际退出码0、三个保存文件对应 step2、probe `status=ok`；直接在聊天中说明路径、配置及本日问题的证据；`experiments/inference_infra/reports/d10_training_smoke.md` 仅作可选整理。若任一失败，写明门槛未过，二十步训练暂缓。
 
 ## 今日脚本与产物清单
 
@@ -122,10 +122,10 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 | `experiments/inference_infra/reports/d10_train_smoke_2/d10_plan.json` | 两步命令、状态与退出码 | d10_train_smoke.py | 自动；仅计划时为 PENDING |
 | `experiments/inference_infra/reports/d10_train_smoke_2/d10_train.log` | 原生训练 stdout/stderr | d10_train_smoke.py | 条件自动；--execute 且标签检查通过后创建 |
 | `experiments/inference_infra/reports/d10_checkpoint_smoke_2.json` | step 2 加载与双路径结果 | d10_checkpoint_probe.py | 条件自动；执行 probe 后写出，失败也记录 |
-| `experiments/inference_infra/reports/d10_training_smoke.md` | 两步训练验收与阻塞 | 验收步骤 | 人工编写 |
+| `experiments/inference_infra/reports/d10_training_smoke.md` | 两步训练验收与阻塞 | 验收步骤 | 可选人工整理；可直接在聊天中回答本日问题 |
 | `experiments/inference_infra/reports/d10_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
 
-权重位于仓库外；以下是当前 `NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy` 时的完整绝对路径。使用自定义数据根时把真实绝对路径逐项写进报告。仅真实训练保存阶段执行后生成；训练中断时不可宣称齐全：
+权重位于仓库外；以下是当前 `NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy` 时的完整绝对路径。使用自定义数据根时在交流中逐项提供真实绝对路径。仅真实训练保存阶段执行后生成；训练中断时不可宣称齐全：
 
 | 完整绝对路径（示例数据根） | 用途 | 生成者与方式 |
 |---|---|---|
@@ -133,23 +133,20 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 | `/tmp/nanochat-w2-toy/base_checkpoints/d10_w2_smoke/meta_000002.json` | 配置与训练状态 | scripts/base_train.py → nanochat/checkpoint_manager.py；条件自动 |
 | `/tmp/nanochat-w2-toy/base_checkpoints/d10_w2_smoke/optim_000002_rank0.pt` | 单进程优化器状态 | scripts/base_train.py → nanochat/checkpoint_manager.py；条件自动 |
 
-原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有运行、条件不满足、人工未填写的项目均标 PENDING。
+原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 
-## 当天记录与离开前核对
+## 今日自验证与交流问题
 
-把以下模板填写到当天报告末尾；运行命令原样保留，失败也写退出码。`PENDING` 表示没有执行；不要用空值代替失败事实。
+自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
 
-```text
-日期：
-源码 commit / dirty 状态：
-解释器 / 设备 / NANOCHAT_DTYPE：
-NANOCHAT_BASE_DIR：
-实际用时：
-运行命令与退出码：
-原始结果路径：
-已验证的事实：
-未验证或阻塞：
-下一次恢复的第一条命令：
-```
+1. 仅生成计划和加 `--execute` 的运行有什么区别？从 `d10_plan.json` 指出状态、真实命令、步数、batch、上下文长度与退出码，解释为什么两步实验要设置 warmup=0。
 
-记录 commit 使用 `git rev-parse HEAD`，改动状态使用 `git status --short`。共享给别人前检查数据路径和日志是否包含私人信息。只提交本次自己的轻量报告和脚本，不提交权重、数据、环境目录或机器特有缓存。
+2. 训练实际执行了几次优化步，日志里的 loss 是否有限？引用 `d10_train.log` 的位置与关键输出；没有完成时说明卡在初始化、数据读取还是训练阶段。
+
+3. 实际数据根、模型标签和 step2 的三个保存文件是什么？推理与恢复优化分别需要哪些文件，为什么文件存在还不足以验收？
+
+4. 重新加载后的 probe 是否 `status=ok`？引用 `d10_checkpoint_smoke_2.json`，解释双路径输出可读性与 checkpoint 格式合法性有什么关系。
+
+5. 两步训练、保存、重新加载三个门槛哪些已经通过？哪些仍未验证（如收敛、质量、GPU性能），能否进入二十步实验，下一步依据是什么？
+
+离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

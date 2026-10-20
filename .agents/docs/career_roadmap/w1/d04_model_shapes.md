@@ -15,7 +15,7 @@ knowledge_scope: W1 D4 无缓存模型路径和张量形状
 
 # W1 D4：从 token ID 走到 logits
 
-今天完成一张能自己讲出来的形状图，并用随机小模型核查。预计 90 分钟：15 分钟配置，25 分钟注意力，20 分钟完整 forward，15 分钟脚本，15 分钟报告。进阶阅读可另加 30 分钟，不挤掉验收。
+今天完成一张能自己讲出来的形状图，并用随机小模型核查。预计 90 分钟：15 分钟配置，25 分钟注意力，20 分钟完整 forward，15 分钟脚本，15 分钟核验问题。进阶阅读可另加 30 分钟，不挤掉验收。
 
 前置：[D3 测试](d03_inference_smoke.md)。只使用随机权重，不要等待真实 checkpoint。随机权重能验证接口和形状，不能衡量语言质量或实际模型性能。
 
@@ -30,12 +30,12 @@ knowledge_scope: W1 D4 无缓存模型路径和张量形状
 | 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d04_shapes_probe.json` | 随机模型形状和后端事实 | `d04_probe_model_and_cache.py --mode shapes` | 条件生成：导入和全部断言成功后自动写入 |
-| `experiments/inference_infra/reports/d04_model_path.md` | 形状链、源码图与运行证据 | 第 5 节在编辑器编写 | 人工编写；图保存在 Markdown 中，不自动生成独立图片 |
-| `experiments/inference_infra/reports/d04_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码人工补记，重复运行追加 |
+| `experiments/inference_infra/reports/d04_model_path.md` | 形状链、源码图与运行证据 | 第 5 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
+| `experiments/inference_infra/reports/d04_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d04_checks.log`；把所用命令、退出码和关键结果另记入当天报告。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d04_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 建立符号与尺寸的对应
 
@@ -49,7 +49,7 @@ rg -n '^class GPTConfig|^def norm|^class CausalSelfAttention|^class Block|def fo
 sed -n '25,160p' nanochat/gpt.py
 ```
 
-在笔记页首写下 `B=批量大小，T=本次输入长度，C=n_embd，Hq=n_head，Hkv=n_kv_head，Dh=C/Hq，V=词表大小`。<abbr title="tensor shape · 张量每个轴的长度。相同数字在不同轴代表不同含义；例如 T 是当前输入长度，Tmax 是缓存容量，两者不能混用。">shape</abbr> 既要记数字，也要记轴含义。
+先确认 `B=批量大小，T=本次输入长度，C=n_embd，Hq=n_head，Hkv=n_kv_head，Dh=C/Hq，V=词表大小`。<abbr title="tensor shape · 张量每个轴的长度。相同数字在不同轴代表不同含义；例如 T 是当前输入长度，Tmax 是缓存容量，两者不能混用。">shape</abbr> 既要记数字，也要记轴含义。
 
 脚本固定 `B=1,T=8,C=64,Hq=4,Hkv=2,Dh=16,V=128,L=2`，足够小且满足整除要求。不能任意改成 `C=16`，当前 smear gate 要读取前 24 个通道，极小配置可能不合法。head dim 同时要兼容当前旋转位置编码的成对拆分。
 
@@ -57,7 +57,7 @@ sed -n '25,160p' nanochat/gpt.py
 
 `norm(x)` 调用 `F.rms_norm(x, (x.size(-1),))`。<abbr title="RMSNorm / Root Mean Square Normalization · 按最后一维的均方根缩放输入。此项目没有可学习的归一化权重，epsilon 未在调用处显式指定，不能擅自声称与另一个实现的常数完全相同。">RMSNorm</abbr> 保持 shape；这里没有可学习 norm 参数，但不能据此说整个模型无参数。
 
-按 `CausalSelfAttention.forward` 的顺序画表：
+按 `CausalSelfAttention.forward` 的顺序核对下面形状表，无需重画：
 
 | 节点 | 形状 | 你要注意的事 |
 |---|---|---|
@@ -78,7 +78,7 @@ Value embedding 会在特定层通过 gate 混入 V；不要把 `c_v(x)` 当作 
 sed -n '460,565p' nanochat/gpt.py
 ```
 
-逐项写入报告草稿：
+沿下面顺序核对，可直接口述：
 
 1. 整数 ID `[B,T]` 查 embedding 得 `[B,T,C]`，转 compute dtype，再 norm。
 2. smear 混合相邻 token embedding。无 cache 时通过切片读取前一个位置，因此当前代码断言 `T>1`。本教程用 P=8；不能用单 token 无缓存输入作为本版本的通过条件。
@@ -104,11 +104,19 @@ python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mod
 
 脚本在初始化后给残差输出投影填入非零随机值，并启用非零 smear 系数。原因是 `init_weights()` 默认把部分输出投影置零，直接使用默认值可能让后续缓存错误被“零输出”掩盖。它依旧是随机功能实验，不是训练好的模型。
 
-编写时验证记录（2026-10-15）：使用 Conda `nanochat` 的 Python 3.10.20 / torch 2.9.1+cpu 运行同一脚本，shape 与有限值断言通过，实际 logits 为 `[1,8,128]`、FP32、SDPA。该记录是交付脚本烟测，不替代你当天生成的实验报告。
+编写时验证记录（2026-10-15）：使用 Conda `nanochat` 的 Python 3.10.20 / torch 2.9.1+cpu 运行同一脚本，shape 与有限值断言通过，实际 logits 为 `[1,8,128]`、FP32、SDPA。该记录是交付脚本烟测，不替代你当天运行的原始结果。
 
-## 5. 记录图、处理失败并验收
+## 5. 当天自验证与交流问题、失败处理及验收
 
-新建 `experiments/inference_infra/reports/d04_model_path.md`，至少包含：配置表、上面的形状链、smear/QK norm/backout 的位置、GPT.generate 伪流程、实际 JSON 链接。下图采用纵向布局，节点内标注输出 shape，表示不传 targets、无缓存且 `T>1` 的 forward 路径：
+对照源码与本次 JSON 自行验证后，直接在聊天里回答；短句和尺寸即可，无需手画图或写长文。`experiments/inference_infra/reports/d04_model_path.md` 仅供可选整理，不是必交文件。
+
+1. 本次 B、T、C、Hq、Hkv、Dh、V、L 各是多少？从 `[B,T]` 推到 `[B,T,V]`，解释为什么 K/V 线性输出比 Q 窄。
+2. 对照 hook JSON，`c_k/c_v` 的 `[1,8,32]` 如何变成 `[1,8,2,16]`？hook 截获的是哪一步，哪些尺寸需要依据源码推导？
+3. RMSNorm、RoPE、Q/K norm、smear、backout、softcap 各在链路哪个位置，哪些保持 shape？为什么这里无缓存 `T=1` 不合法？
+4. `GPT.generate` 如何从最后位置 logits 选 token、拼回前缀？为什么下一步又处理越来越长的输入？传入 targets 时返回值又有什么不同？
+5. 给出本次 `d04_shapes_probe.json` 的实际 logits shape/dtype、后端与有限值结果，或最早错误；为什么脚本启用非零输出投影和 smear，随机模型成功仍不能证明什么？
+
+下图可直接用作核对辅助，无需重新绘制；它表示不传 targets、无缓存且 `T>1` 的 forward 路径：
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
@@ -129,7 +137,7 @@ flowchart TD
     linkStyle default stroke:#3b82f6,stroke-width:3px;
 ```
 
-`Vpad` 表示模型为对齐而补齐后的词表大小，`V` 是实际词表大小。将上图中的符号替换为本次实验的具体尺寸；Attention 内部的 Q/K/V 布局另用第 2 节的表补充。不要将 hook 看到的线性层输出错标成多头布局。
+`Vpad` 表示模型为对齐而补齐后的词表大小，`V` 是实际词表大小。交流时用本次具体尺寸解释上图符号；Attention 内部的 Q/K/V 布局参照第 2 节的表。不要将 hook 看到的线性层输出错标成多头布局。
 
 | 失败 | 检查 |
 |---|---|
@@ -139,6 +147,6 @@ flowchart TD
 | shape 不一致 | 先核对配置和线性层输出/reshape 的区别 |
 | 有 NaN/Inf | 保留输出与 seed，不能用异常数值继续对比 |
 
-验收：能从 `[B,T]` 推到 `[B,T,V]`；能说明 Hq/Hkv；真实运行成功或明确依赖阻塞；报告不含随机模型的质量结论。当天记录填写真实日期、commit、用时、命令、结果、状态和明日待办。
+验收：能从 `[B,T]` 推到 `[B,T,V]`；能说明 Hq/Hkv；真实运行成功或明确依赖阻塞；回答不含随机模型的质量结论。交流附实际日期、commit、命令、JSON 路径、状态和明日待办；用时可选。
 
 上一篇：[D3 推理测试](d03_inference_smoke.md)。下一篇：[D5 缓存生命周期](d05_cache_lifecycle.md)。

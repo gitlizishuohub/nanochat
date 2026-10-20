@@ -16,14 +16,18 @@ updated: 2026-10-20
 
 环境选择：用户在同一任务中明确要求先创建 Conda 环境，并命名为 `nanochat`。后续教程以 `conda activate nanochat` 后运行 `python` 为主；不要默认切回项目 `.venv` 或使用会另建 `.venv` 的 `uv run`。
 
+每日验证交流（2026-10-20 用户纠正）：用户不喜欢手写 report，要求直接修改每日教程，明确每天特异性的验证问题，由用户自行验证后与助手交流。每日正文应提供当天专属的问题和所需证据，允许在聊天中逐项简答；人工 Markdown 报告为可选整理，不作为每日验收前置。保留自动日志、结构化结果、真实命令与退出码以及未验证边界；简历、复现入口等实际材料与日常报告区分，允许先交流核对再整理。不能只套用一份通用五项报告模板。
+
 已验证环境：`/home/lizishuo/miniconda3/envs/nanochat/bin/python` 为 Python 3.10.20，PyTorch 2.9.1+cpu；CPU FP32 / SDPA，无 CUDA。2026-10-15 推理相关测试 13 passed / 10 skipped，依赖兼容性检查通过。安装及复查命令见 `.agents/docs/project-maintenance/nanochat-conda-environment-2026-10-15.md`。这些结果不代表真实 checkpoint、训练或 GPU 性能已经验收。
 
 已完成交付：`w1/`、`w2/`、`w3/` 共 21 篇教程、13 个脚本，完成 CPU 随机模型/cache、tokenizer/loader、重复基准及跨周统计接口验证。验收范围与未测条件见 `.agents/docs/project-maintenance/career-roadmap-guides-validation-2026-10-15.md`。后续从 W1 第一天实际执行，保留真实实验日志；真实训练和 GPU 性能仍待执行，不按原日历倒填完成状态。
 
 Why: 用户要求每天可以手把手操作，明确纠正了额外 README 中转层；脚本应作为实际交付文件，而非只提供代码片段。
 
-How to apply: 维护 `w1/`、`w2/`、`w3/` 时按学习依赖编号，每天完整解释前置、步骤、失败分流和产物。指导与脚本留在周目录，实际执行产生的正式成果放在 `experiments/inference_infra/`；原日历不表示对应任务已经完成。脚本验证与真实模型/GPU 实测分别报告。
+How to apply: 维护 `w1/`、`w2/`、`w3/` 时按学习依赖编号，每天完整解释前置、步骤、失败分流和产物，并给出当天可在聊天回答的具体自验证问题；同步移除步骤、产物表与验收中强制手写报告的要求。指导与脚本留在周目录，实际执行产生的正式成果放在 `experiments/inference_infra/`；原日历不表示对应任务已经完成。脚本验证与真实模型/GPU 实测分别报告。
 
 Evidence: 2026-10-15 本聊天用户明确要求“有实验脚本也要给试验脚本，放在每周的脚本目录中”和“readme不合要求……指导文件中直接链接指向脚本即可”，随后补充“先创建适用于nanochat的虚拟环境”“conda命名为nanochat”；2026-10-20 用户提供五条要求，确认对照说明后明确“可以开始修改吧”，授权全程 d01–d21 编号与每日脚本/产物清单。原总计划位于 `.agents/docs/career_roadmap/nanochat_daily_execution_2026-10-01.md`。
 
-Invalidates: 用户明确改变文档结构、交付范围或实验产物目录时更新；源计划和源码变化后重新核对教程命令。
+Evidence 补充：2026-10-20 本聊天用户先说“不喜欢写repport”，随后要求“要每天特异性的，直接修改每日教程”；落点为 `w1/d01_starting_point.md` 至 `w3/d21_project_briefing.md` 的每日自验证与交流要求。
+
+Invalidates: 用户明确改变文档结构、交付范围、每日记录偏好或实验产物目录时更新；源计划和源码变化后重新核对教程命令。
