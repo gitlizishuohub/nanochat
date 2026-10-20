@@ -1,0 +1,149 @@
+---
+source_files:
+  - nanochat/common.py
+  - nanochat/tokenizer.py
+  - nanochat/dataset.py
+  - nanochat/dataloader.py
+  - scripts/tok_train.py
+  - scripts/tok_eval.py
+  - scripts/base_train.py
+  - nanochat/checkpoint_manager.py
+  - nanochat/gpt.py
+  - nanochat/engine.py
+  - scripts/infer_bench.py
+  - nanochat/flash_attention.py
+doc_type: tutorial
+knowledge_scope: W2第5天实操与验收
+---
+
+# W2 D5：冻结原始数据协议和统计边界
+
+前一天：[返回前一天](d11_checkpoint_generation.md)；后一天：[继续下一天](d13_repeated_benchmark.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+
+## 开始前：固定 shell 与结果位置
+
+所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+
+```bash
+source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
+conda activate nanochat
+cd /home/lizishuo/_program_/Project/nanochat
+python -c "import sys; print(sys.executable); print(sys.version)"
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+exec > >(tee -a experiments/inference_infra/reports/d12_session.log) 2>&1
+```
+
+解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。在报告写出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
+
+本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d12_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时在报告标明会话边界。
+
+## 今日目标与时间盒
+
+今天用 20 分钟读测量边界、25 分钟写协议、20 分钟核对 schema、15 分钟用错误分支验证落盘。前置是 [模型身份记录](d11_checkpoint_generation.md)。即便没有 checkpoint，协议设计和错误行检查仍能完成。
+
+## 第一步：先定义被测服务与计时范围
+
+阅读 [重复基准脚本](scripts/d12_benchmark.py) 的 `measure()`。本周固定 `mode=engine`，输入为长度恰好 P 的 token ID 列表，首位 BOS，剩余均为普通 ID1（可显式调整 `--prompt-fill-id`，记录独立prompt hash）；不在测量中做文本 tokenization。这是“固定形状 ID 工作负载”，不是用户真实问答延迟。
+
+<abbr title="TTFT / Time to First Token · 从开始处理已编码的 token ID 输入，到第一个生成 token 列准备好的时间。本文包括 Engine generator 首次执行、cache分配、prefill、cache复制、首token采样及GPU同步，不包括模型加载和tokenizer。">TTFT</abbr> 的起点是首次 `next(stream)` 前；终点是第一次 yield 后完成设备同步。Engine generator 在创建对象时不执行函数体，因此计时不能从创建前后随意截。
+
+<abbr title="TPOT / Time Per Output Token · 首token之后相邻输出步骤之间的耗时。本文每个值是一个包含B行的同步decode列间隔，单位ms，不除以B。每次run的TPOT是G−1个间隔的均值。">TPOT</abbr> 记录为 `decode_step_ms` 数组；P95可以对“每次run的平均TPOT”计算，也可对“所有步延迟”计算，但二者不是同一个统计量，本项目汇总采用前者并说明样本数。
+
+`elapsed_ms` 等于 TTFT 加所有 decode 间隔，终点为最后一列 yield。脚本收满 G 列立即关闭 generator，避免 Engine 在最后 yield 之后再计算一个无用 forward。CUDA 每个输出边界同步，测得的是带同步开销的流式延迟；以后用事件测纯 kernel 必须分开命名。
+
+## 第二步：写 d12_protocol.md 的固定字段
+
+创建 `experiments/inference_infra/d12_protocol.md`，填写：
+
+```text
+协议版本：1
+源码commit / dirty摘要：
+工作负载：固定token-ID prompt；同一prompt复制B份输出
+模型来源 / tag / step / 权重hash / tokenizer hash：
+设备 / GPU驱动 / PyTorch / CUDA / dtype / attention backend：
+seed：42
+P / G / B：先32 / 8 / 1
+边界：P+G不超过sequence_len；不自动裁短
+预热：3次；正式：至少5次；每次新建Engine cache
+TTFT范围：token ID输入到首列yield，含分配/prefill/复制/采样，不含加载和tokenizer
+TPOT：G-1个同步输出列间隔；每次run先取均值
+有效token：每行尚未结束且mask=1且不是terminal的token
+吞吐：有效token总数 / elapsed秒；B乘法不再重复计算
+汇总：仅measure+ok；median与nearest-rank P95；失败/提前结束保留
+CPU或random：仅功能/契约，不用于GPU加速结论
+GPU驱动补录命令：nvidia-smi（不可用则记录缺失）
+```
+
+注意 B=4 的 prefill 仍只有一个 prompt，而不是四个不同请求的吞吐；不能把这样的 TTFT 与普通 batch-prefill 工作负载混为一谈。每次调用新建 cache 并预分配零张量；这部分开销明确计入 TTFT。
+
+## 第三步：逐字段认识 JSONL
+
+<abbr title="JSONL / JSON Lines · 每行一个独立JSON对象。适合追加保存每次实验原始记录；读取时每行分别解析，不能把整个文件当成一个JSON对象。">JSONL</abbr> 文件每行一个 run，预热也保留，错误不会抹除。schema由脚本输出定义：
+
+| 类别 | 实际字段与约束 |
+|---|---|
+| 标识 | schema_version=1、session_id、run_id；每行run_id唯一 |
+| 运行角色 | phase=warmup/measure；repeat从0开始；setup_or_run是异常行 |
+| 状态 | ok/early_stop/error；只有固定G步、所有B行都有G个有效token才ok |
+| 形状 | prompt_tokens、decode_tokens、batch_size、actual_decode_steps、prompt_fill_id、prompt_sha256 |
+| 计数 | generated_tokens、per_row_generated_tokens；前者为后者之和 |
+| 延迟 | ttft_ms、decode_step_ms、tpot_ms、elapsed_ms；毫秒单位 |
+| 吞吐 | tokens_per_s；实际有效token数除以含TTFT总秒数 |
+| 内存 | peak_allocated_bytes、peak_reserved_bytes；CPU为null，不能写0假装测得 |
+| 归因 | model_kind、source、model_tag、checkpoint_step、model_config、checkpoint_sha256 |
+| 可复现 | seed、env、precision、attention_backend、timing_scope、batch_semantics、evidence_scope |
+| 异常 | error；setup失败行允许缺少延迟和环境字段，汇总必须容忍 |
+
+GPU峰值在模型已加载之后重置，allocated仍包含活跃模型内存；reserved是分配器保留值，不是“缓存比无缓存节省显存”。每次重复不清空CUDA allocator，所以reserved可能保留前次状态，此边界写入报告。
+
+## 第四步：制造明确的缺失模型错误行
+
+不要手填一组漂亮数字作为 schema 样例。用一个不存在的标签生成真实错误样例：
+
+```bash
+python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --model-tag absent-w2-schema-check --step 123456 --output experiments/inference_infra/results/raw/d12_schema_error.jsonl
+```
+
+预期非零退出，JSONL有 `status=error` 和真实异常原因。这只验证错误落盘；模型缺失或依赖缺失都可能触发，不是一次成功测量。参数非法（例如 `--warmup 0`）由 argparse 退出2，尚未进入实验，因此不会写raw行。
+
+## 失败分流与验收
+
+- JSONL不能解析：检查是否把普通终端日志追加到了同一个raw文件；stdout日志与JSONL分开保存。
+- 字段缺失：首先检查status/phase，setup错误缺timing是合法的；ok行缺字段才需修复。
+- G=1：只有TTFT没有后续间隔，TPOT应null；不要除以G或强填0。
+- 验收：protocol边界完整；能用字段说明吞吐与B的关系；错误样例来自真实命令；未运行成功的数据不填入基线表。
+
+## 今日脚本与产物清单
+
+每日编号使用全程 d01–d21；跨日复用保留首次实际执行日。以下项目相对路径均以仓库根目录为基准，脚本清单直接列出本日执行入口。
+
+| 脚本完整项目路径 | 用途 | 执行阶段 | 输入 | 运行条件 |
+|---|---|---|---|---|
+| `.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py` | 检验错误行落盘与测量字段 | 第四步 | `$NANOCHAT_BASE_DIR/base_checkpoints/absent-w2-schema-check/`（故意不存在） | 依赖可加载时尝试缺模型；非零退出是预期 |
+
+| 产物完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
+|---|---|---|---|
+| `experiments/inference_infra/d12_protocol.md` | 固定工作负载、计时与统计边界 | 第二步 | 人工编写；后续复用仍保留 d12 |
+| `experiments/inference_infra/results/raw/d12_schema_error.jsonl` | 真实错误样例 | d12_benchmark.py | 条件自动；通过参数校验进入实验后写错误行；argparse 错误不写 |
+| `experiments/inference_infra/reports/d12_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
+
+原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有运行、条件不满足、人工未填写的项目均标 PENDING。
+
+## 当天记录与离开前核对
+
+把以下模板填写到当天报告末尾；运行命令原样保留，失败也写退出码。`PENDING` 表示没有执行；不要用空值代替失败事实。
+
+```text
+日期：
+源码 commit / dirty 状态：
+解释器 / 设备 / NANOCHAT_DTYPE：
+NANOCHAT_BASE_DIR：
+实际用时：
+运行命令与退出码：
+原始结果路径：
+已验证的事实：
+未验证或阻塞：
+下一次恢复的第一条命令：
+```
+
+记录 commit 使用 `git rev-parse HEAD`，改动状态使用 `git status --short`。共享给别人前检查数据路径和日志是否包含私人信息。只提交本次自己的轻量报告和脚本，不提交权重、数据、环境目录或机器特有缓存。
