@@ -20,11 +20,11 @@ knowledge_scope: W3第1日实操与验收
 
 先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
 
-- **阅读入口：**[3.2 角色、工具与监督位置](../../llm-training-workflow/03-tokenizer-and-conversation-protocol.md#reading-3-2)；[5.2 SFT：先截对话、再装箱补齐](../../llm-training-workflow/05-data-encoding-and-batching.md#reading-5-2)；[11.1 起点与训练目标](../../llm-training-workflow/11-supervised-fine-tuning.md#reading-11-1)；[11.2 示范数据到输入和目标](../../llm-training-workflow/11-supervised-fine-tuning.md#reading-11-2)。
-- **今天重点：**在写贡献之前补齐对话模型的来源：角色协议、助手目标、对话装箱，以及基础权重如何进入监督微调。先读概念和对齐示例，再看串联流程。
-- **暂时跳过：**今天只学习 <abbr title="SFT / Supervised Fine-Tuning · 监督微调；用示范对话中的助手目标更新基础模型。">SFT</abbr> 原理，不启动微调；详细优化器继承和停止边界留作 D21 后选读。
+- **阅读入口**：[3.2 角色、工具与监督位置](../../llm-training-workflow/03-tokenizer-and-conversation-protocol.md#reading-3-2)；[5.2 SFT：先截对话、再装箱补齐](../../llm-training-workflow/05-data-encoding-and-batching.md#reading-5-2)；[11.1 起点与训练目标](../../llm-training-workflow/11-supervised-fine-tuning.md#reading-11-1)；[11.2 示范数据到输入和目标](../../llm-training-workflow/11-supervised-fine-tuning.md#reading-11-2)。
+- **今天重点**：在写贡献之前补齐对话模型的来源：角色协议、助手目标、对话装箱，以及基础权重如何进入监督微调。先读概念和对齐示例，再看串联流程。
+- **暂时跳过**：今天只学习 <abbr title="SFT / Supervised Fine-Tuning · 监督微调；用示范对话中的助手目标更新基础模型。">SFT</abbr> 原理，不启动微调；详细优化器继承和停止边界留作 D21 后选读。
 
-**读完能解释：**为什么训练示范里有用户文本，用户目标却可以不计损失？你能把预训练和 SFT 的贡献说清楚吗？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：为什么训练示范里有用户文本，用户目标却可以不计损失？你能把预训练和 SFT 的贡献说清楚吗？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
 ## 开始前：固定终端和记录方式
 

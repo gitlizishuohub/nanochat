@@ -24,11 +24,11 @@ knowledge_scope: W2第3天实操与验收
 
 先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
 
-- **阅读入口：**[6.3 logits、目标对齐与有效监督](../../llm-training-workflow/06-forward-pass-and-prediction-loss.md#reading-6-3)；[7.1 一次更新的真实次序](../../llm-training-workflow/07-backpropagation-and-parameter-updates.md#reading-7-1)；[7.4 一次更新的流程图](../../llm-training-workflow/07-backpropagation-and-parameter-updates.md#reading-7-4)。
-- **今天重点：**把昨日目标对齐接到有效目标损失、反向、梯度累积和参数更新，结合两步训练区分 backward 与 optimizer.step。
-- **暂时跳过：**7.2.1 的算法数值和 7.3 的完整预算公式以后按需深读；今天只看训练计划里的实际步数。
+- **阅读入口**：[6.3 logits、目标对齐与有效监督](../../llm-training-workflow/06-forward-pass-and-prediction-loss.md#reading-6-3)；[7.1 一次更新的真实次序](../../llm-training-workflow/07-backpropagation-and-parameter-updates.md#reading-7-1)；[7.4 一次更新的流程图](../../llm-training-workflow/07-backpropagation-and-parameter-updates.md#reading-7-4)。
+- **今天重点**：把昨日目标对齐接到有效目标损失、反向、梯度累积和参数更新，结合两步训练区分 backward 与 optimizer.step。
+- **暂时跳过**：7.2.1 的算法数值和 7.3 的完整预算公式以后按需深读；今天只看训练计划里的实际步数。
 
-**读完能解释：**loss.backward 和 optimizer.step 各做什么？微批次数为什么不一定等于参数更新次数？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：loss.backward 和 optimizer.step 各做什么？微批次数为什么不一定等于参数更新次数？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
 ## 开始前：固定 shell 与结果位置
 

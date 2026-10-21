@@ -24,11 +24,11 @@ knowledge_scope: W2第7天实操与验收
 
 先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
 
-- **阅读入口：**[5.3 batch、epoch 和每卡分配](../../llm-training-workflow/05-data-encoding-and-batching.md#reading-5-3)；[9.1 数据分工与梯度累积](../../llm-training-workflow/09-distributed-optimizer-and-communication.md#reading-9-1)；[9.2 优化器中的通信与分片](../../llm-training-workflow/09-distributed-optimizer-and-communication.md#reading-9-2)。
-- **今天重点：**先复盘批量的定义，再概览多卡的数据与优化器分工，区分训练跨卡扩展和今天同提示的多样本生成。
-- **暂时跳过：**9.2 的集合通信和矩阵分片只理解职责，不要求推导，也不启动多卡实验。
+- **阅读入口**：[5.3 batch、epoch 和每卡分配](../../llm-training-workflow/05-data-encoding-and-batching.md#reading-5-3)；[9.1 数据分工与梯度累积](../../llm-training-workflow/09-distributed-optimizer-and-communication.md#reading-9-1)；[9.2 优化器中的通信与分片](../../llm-training-workflow/09-distributed-optimizer-and-communication.md#reading-9-2)。
+- **今天重点**：先复盘批量的定义，再概览多卡的数据与优化器分工，区分训练跨卡扩展和今天同提示的多样本生成。
+- **暂时跳过**：9.2 的集合通信和矩阵分片只理解职责，不要求推导，也不启动多卡实验。
 
-**读完能解释：**训练的 world size、梯度累积和 Engine 的 num_samples 分别改变什么？为什么它们不能互相替代？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：训练的 world size、梯度累积和 Engine 的 num_samples 分别改变什么？为什么它们不能互相替代？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
 ## 开始前：固定 shell 与结果位置
 

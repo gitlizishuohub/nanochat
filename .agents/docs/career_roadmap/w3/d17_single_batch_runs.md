@@ -20,11 +20,11 @@ knowledge_scope: W3第3日实操与验收
 
 先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
 
-- **阅读入口：**[8.1 显式混合精度与梯度缩放](../../llm-training-workflow/08-precision-and-training-acceleration.md#reading-8-1)；[8.3 编译与动态输入](../../llm-training-workflow/08-precision-and-training-acceleration.md#reading-8-3)。
-- **今天重点：**结合今天的真实设备和 dtype，区分精度选择、编译准备与正式测量。仅在需要理解 <abbr title="FP8 · 8 位浮点计算；本项目的可选训练加速方式，需要兼容硬件。">FP8</abbr> 模型来源时选读 8.2 的实现限制。
-- **暂时跳过：**没有对应 GPU 时不做 FP8 实测；本日不要求理解动态量化或优化内核。
+- **阅读入口**：[8.1 显式混合精度与梯度缩放](../../llm-training-workflow/08-precision-and-training-acceleration.md#reading-8-1)；[8.3 编译与动态输入](../../llm-training-workflow/08-precision-and-training-acceleration.md#reading-8-3)。
+- **今天重点**：结合今天的真实设备和 dtype，区分精度选择、编译准备与正式测量。仅在需要理解 <abbr title="FP8 · 8 位浮点计算；本项目的可选训练加速方式，需要兼容硬件。">FP8</abbr> 模型来源时选读 8.2 的实现限制。
+- **暂时跳过**：没有对应 GPU 时不做 FP8 实测；本日不要求理解动态量化或优化内核。
 
-**读完能解释：**编译或预热耗时与正式生成延迟怎样区分？CPU 实测能支持哪些结论，哪些仍需 GPU？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：编译或预热耗时与正式生成延迟怎样区分？CPU 实测能支持哪些结论，哪些仍需 GPU？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
 ## 开始前：固定终端和记录方式
 

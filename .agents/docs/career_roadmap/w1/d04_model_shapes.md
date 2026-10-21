@@ -23,11 +23,11 @@ knowledge_scope: W1 D4 无缓存模型路径和张量形状
 
 先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
 
-- **阅读入口：**[6.1 先理解基本前向](../../llm-training-workflow/06-forward-pass-and-prediction-loss.md#reading-6-1)；[6.2 注意力方向、窗口与RoPE](../../llm-training-workflow/06-forward-pass-and-prediction-loss.md#reading-6-2)。
-- **今天重点：**先沿 [B,T] → [B,T,C] → [B,T,V] 走通，再对照完整形状表认识注意力和前馈层。注意力小节先掌握因果方向与窗口。
-- **暂时跳过：**Smear、Value Embedding、Backout 先标出位置，不要求推导；损失和目标对齐在 D9–D10 补读。
+- **阅读入口**：[6.1 先理解基本前向](../../llm-training-workflow/06-forward-pass-and-prediction-loss.md#reading-6-1)；[6.2 注意力方向、窗口与RoPE](../../llm-training-workflow/06-forward-pass-and-prediction-loss.md#reading-6-2)。
+- **今天重点**：先沿 [B,T] → [B,T,C] → [B,T,V] 走通，再对照完整形状表认识注意力和前馈层。注意力小节先掌握因果方向与窗口。
+- **暂时跳过**：Smear、Value Embedding、Backout 先标出位置，不要求推导；损失和目标对齐在 D9–D10 补读。
 
-**读完能解释：**模型在哪一步从整数变成向量，又在哪一步得到整个词表的预测分数？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：模型在哪一步从整数变成向量，又在哪一步得到整个词表的预测分数？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
 ## 当日脚本与产物清单
 

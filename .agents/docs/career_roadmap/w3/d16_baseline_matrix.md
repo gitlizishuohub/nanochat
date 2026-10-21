@@ -20,11 +20,11 @@ knowledge_scope: W3第2日实操与验收
 
 先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
 
-- **阅读入口：**[4.1 配置不是可学习权重](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-1)；[4.3 从配置重建模型并加载参数](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-3)；[12.2 生成控制流与返回格式](../../llm-training-workflow/12-inference-and-generation.md#reading-12-2)。
-- **今天重点：**把模型配置、所选权重、配套词表和缓存容量连起来，核对今天固定的输入长度、生成长度与样本数。
-- **暂时跳过：**不更换模型来填补同一个基线；初始化数值表和 <abbr title="SFT / Supervised Fine-Tuning · 监督微调；用示范对话中的助手目标更新基础模型。">SFT</abbr> 参数不影响今天冻结身份。
+- **阅读入口**：[4.1 配置不是可学习权重](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-1)；[4.3 从配置重建模型并加载参数](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-3)；[12.2 生成控制流与返回格式](../../llm-training-workflow/12-inference-and-generation.md#reading-12-2)。
+- **今天重点**：把模型配置、所选权重、配套词表和缓存容量连起来，核对今天固定的输入长度、生成长度与样本数。
+- **暂时跳过**：不更换模型来填补同一个基线；初始化数值表和 <abbr title="SFT / Supervised Fine-Tuning · 监督微调；用示范对话中的助手目标更新基础模型。">SFT</abbr> 参数不影响今天冻结身份。
 
-**读完能解释：**为什么只记一个 d4 标签不够？你的基线还需要固定哪些身份信息和输入条件？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：为什么只记一个 d4 标签不够？你的基线还需要固定哪些身份信息和输入条件？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
 ## 开始前：固定终端和记录方式
 

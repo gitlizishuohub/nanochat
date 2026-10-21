@@ -51,7 +51,7 @@ SFT默认继承base meta长度、每卡行数、总batch，以及base user_confi
 
 ## 11.4 停止条件与运行边界
 
-**SFT --num-iterations 实现边界：**生成器内部 it 每生成一个微批加1并触发 last_step，而非外层优化更新计数；外层还预取下一批，consumed满一轮也可先结束，多个rank以MAX同步结束。不能承诺“精确更新N步”。
+**SFT --num-iterations 实现边界**：生成器内部 it 每生成一个微批加1并触发 last_step，而非外层优化更新计数；外层还预取下一批，consumed满一轮也可先结束，多个rank以MAX同步结束。不能承诺“精确更新N步”。
 
 `render_conversation` 默认最多 2048 个 ID，SFT 调用没有传入 `args.max_seq_len`。修改训练行长度不会同步修改这一上游截断条件，也不会重建加载模型的窗口/RoPE 配置，却会将新长度写入保存元数据，可能导致再次加载时的行为与训练时不同。装箱与全忽略目标的边界见[数据章节](05-data-encoding-and-batching.md)。
 
