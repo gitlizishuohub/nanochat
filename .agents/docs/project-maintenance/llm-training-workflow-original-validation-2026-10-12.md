@@ -37,7 +37,7 @@ source_symbols:
   - Engine.generate_batch
 ---
 
-[栏目目录](README.md) · [上一篇](12-6-checkpoints-evaluation-and-delivery.md)
+[返回训练流程栏目](../llm-training-workflow/README.md)
 
 > 拆分自原文；源码核对日期为 2026-10-12。本次仅整理文档结构，未重新核验源码或运行训练。
 

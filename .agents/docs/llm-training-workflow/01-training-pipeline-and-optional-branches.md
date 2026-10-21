@@ -1,0 +1,133 @@
+---
+doc_role: training-workflow
+source_revision: fbc049f379926ecdb49071a129586278245d71c2
+review_date: 2026-10-12
+source_files:
+  - nanochat/gpt.py
+  - nanochat/tokenizer.py
+  - nanochat/dataset.py
+  - nanochat/dataloader.py
+  - nanochat/common.py
+  - nanochat/optim.py
+  - nanochat/fp8.py
+  - nanochat/checkpoint_manager.py
+  - nanochat/loss_eval.py
+  - nanochat/core_eval.py
+  - nanochat/engine.py
+  - scripts/tok_train.py
+  - scripts/tok_eval.py
+  - scripts/base_train.py
+  - scripts/chat_sft.py
+  - scripts/chat_rl.py
+  - scripts/base_eval.py
+  - scripts/chat_eval.py
+  - scripts/chat_cli.py
+  - tasks/common.py
+  - tasks/smoltalk.py
+  - tasks/mmlu.py
+  - tasks/gsm8k.py
+  - tasks/arc.py
+  - tasks/humaneval.py
+source_symbols:
+  - GPT.forward
+  - GPT.setup_optimizer
+  - RustBPETokenizer.render_conversation
+  - tokenizing_distributed_data_loader_with_state_bos_bestfit
+  - MuonAdamW.step
+  - Engine.generate_batch
+---
+
+[栏目目录](README.md) · [下一篇](02-environment-and-data-preparation.md) · [术语查阅](glossary/README.md)
+
+> 原技术正文沿用 2026-10-12 的源码核对记录；2026-10-21 调整结构。新增 SFT 串联说明做了局部静态核对，未执行训练。
+
+# 1. 训练主线与可选分支
+
+<a id="sec-2"></a>
+
+从零训练可对话模型的主线为：环境和语料 → 固定<a id="ref-tokenizer-001"></a><abbr title="Tokenizer｜分词器&#10;定义：在文本字符串和整数词元ID序列间编码、解码的映射系统，词元未必是一个字或一个完整单词。&#10;作用：让所有训练/推理阶段使用同一输入协议，决定词表维度与序列预算。&#10;本项目：RustBPETokenizer以rustbpe训练合并排名、tiktoken编码，保存tokenizer.pkl；get_tokenizer从缓存目录加载。&#10;注意：加载只验证词表数量，数量相同不证明ID映射一致。重新训练词表后不能随意给原权重使用，应保留原文件。&#10;位置：nanochat/tokenizer.py:34 RustBPETokenizer；nanochat/tokenizer.py:264 get_tokenizer">分词器</abbr>（[释义](glossary/02-data-and-protocol.md#term-tokenizer)） → 随机初始化 → <a id="ref-pretrain-001"></a><abbr title="Pretraining｜预训练&#10;定义：在普通文档上学习下一词元预测的阶段，本项目从随机初始化权重开始，不要求每篇文档是问答示范。&#10;作用：建立一般语言统计与知识基础，产出的基础权重可以直接续写，也可交给对话微调。&#10;本项目：base_train调用在线分词装箱器，用T+1行错位成x/y，对全部T目标计算交叉熵；默认数据与统计参数比12。&#10;注意：比例采用transformer_matrices+lm_head，不等于总参数或epoch数；普通文档中的BOS也可成为训练目标。&#10;位置：scripts/base_train.py:129 build_model_meta；scripts/base_train.py:263 get_scaling_params">预训练</abbr>（[释义](glossary/01-training-stages.md#term-pretrain)） → 加载基础权重做 <a id="ref-sft-001"></a><abbr title="SFT / Supervised Fine-Tuning｜监督微调&#10;定义：以示范回答的目标词元训练模型，前向使用数据中的真实前缀，而不是先自由生成再判定对错。&#10;作用：把基础续写模型调整为遵守角色与工具协议、回答选择题和数学题的对话模型。&#10;本项目：chat_sft从base加载完整GPT，混合SmolTalk、MMLU、GSM8K，监督助手正文、调用及assistant_end，忽略用户/工具结果。&#10;注意：全参数更新，没有LoRA；默认加载base优化器是跨阶段热启动，不是恢复中断的SFT循环。&#10;位置：scripts/chat_sft.py:94 base加载；scripts/chat_sft.py:180 sft_data_generator_bos_bestfit">SFT</abbr>（[释义](glossary/01-training-stages.md#term-sft)） → 评估 → 使用配套词表生成。只交付基础模型可在基础评估后结束；已有兼容基础权重可以直接进入 SFT。<a id="ref-rl-001"></a><abbr title="RL / Reinforcement Learning｜强化学习&#10;定义：利用模型生成结果的奖励调整行为；训练信号是结果好坏，不是每个位置应写哪一个示范词元。&#10;作用：在已有SFT对话能力上提高数学答案正确率，是主线外的任务专项可选阶段。&#10;本项目：chat_rl从sft加载，每题默认采16回答，GSM8K.reward给0/1，奖励减组均值形成优势，再对有效生成词元求策略梯度。&#10;注意：没有奖励模型、价值网络、参考KL、PPO比率裁剪或fp16 GradScaler；训练后仍需真实评估。&#10;位置：scripts/chat_rl.py:74 sft加载；scripts/chat_rl.py:86 get_batch；tasks/gsm8k.py:109 reward">强化学习</abbr>（[释义](glossary/01-training-stages.md#term-rl)）是数学任务可选分支。
+
+| 阶段 | 输入 | 输出 | 目标与衔接 |
+| --- | --- | --- | --- |
+| 分词器训练 | 训练文档 text 与字符预算 | tokenizer.pkl、token_bytes.pt | 建立 ID 协议；所有后续阶段配套使用。 |
+| 基础训练 | 随机模型、普通文档、固定词表 | base_checkpoints/tag 下权重、meta、优化器分片 | 全位置预测下一词元；可直接续写或进入 SFT。 |
+| 对话监督训练 | base 权重与对话示范 | chatsft_checkpoints/tag 下权重、meta、优化器分片 | 助手有效目标预测；学角色、选择题和工具协议。 |
+| 数学奖励训练 | sft 权重、数学题、生成回答和奖励 | chatrl_checkpoints/tag 下权重与结构 meta | 增大相对高奖励回答的概率；重新评估后交付。 |
+| 评估与推理 | 已保存权重、原词表、任务数据/提示 | 指标、CSV 或回答 | 不更新参数；可从各阶段权重读取。 |
+
+当前没有 <a id="ref-lora-001"></a><abbr title="LoRA / Low-Rank Adaptation｜低秩适配&#10;定义：通常冻结已有矩阵，只训练低秩增量BA，通过W加缩放后的BA改变模型输出。&#10;作用：在支持此机制的系统中减少可训练参数与优化器状态，这是解释性对照，不是当前训练阶段。&#10;本项目：当前源码没有低秩层、适配器文件或LoRA入口；GPT.setup_optimizer直接收集原模型所有参数，SFT更新完整权重。&#10;注意：存在微调不能证明存在LoRA，全参数SFT与低秩适配是不同实现选择；本项目无可直接用的LoRA命令。&#10;位置：nanochat/gpt.py:419 GPT.setup_optimizer；scripts/chat_sft.py:132 优化器构造">LoRA</abbr>（[释义](glossary/01-training-stages.md#term-lora)）、<a id="ref-distill-001"></a><abbr title="Knowledge Distillation｜知识蒸馏&#10;定义：学生学习教师给出的输出、概率或中间表示，以转移能力；需要明确教师来源、学生和训练目标。&#10;作用：常用于压缩模型或迁移能力，但不能仅凭使用示范文本就断言有在线教师管线。&#10;本项目：三个入口只构造一个被优化GPT，没有教师前向、软目标温度或蒸馏损失；当前没有蒸馏入口和对应权重衔接。&#10;注意：数据可能含其它模型生成文本不证明仓库实现在线蒸馏；teacher forcing也不表示存在教师模型。&#10;位置：scripts/base_train.py:146 模型构建；nanochat/gpt.py:520 损失分支">蒸馏</abbr>（[释义](glossary/01-training-stages.md#term-distill)）、<a id="ref-dpo-001"></a><abbr title="DPO / Direct Preference Optimization｜直接偏好优化&#10;定义：通常以同提示下偏好/非偏好回答构造相对概率目标，直接训练模型倾向偏好答案。&#10;作用：在实现该算法的系统中利用成对偏好标签，不必先训练可学习奖励模型。&#10;本项目：当前没有chosen/rejected适配、DPO损失或训练入口；SFT用示范，RL用每题多回答的数值正确性奖励。&#10;注意：组内奖励比较不是DPO；不能把它画成SFT之后必须阶段，也没有已确认可执行命令。&#10;位置：scripts/chat_sft.py:163 train_tasks；scripts/chat_rl.py:118 rewards；nanochat/gpt.py:520 损失">DPO 偏好优化</abbr>（[释义](glossary/01-training-stages.md#term-dpo)）训练入口，也没有独立 mid_train。<a id="ref-grpo-001"></a><abbr title="GRPO / PPO / REINFORCE｜组相对优化与策略梯度对照&#10;定义：REINFORCE以奖励加权生成logp；GRPO使用组内相对奖励，PPO通常还有新旧策略概率比和裁剪。&#10;作用：辨明源码真正优化的目标，避免把脚本标题算法名当成完整标准实现。&#10;本项目：chat_rl自称带引号GRPO，优势仅减均值不除标准差，逐分块按有效token数/分块数/每卡题数归一化。&#10;注意：没有ratio+clip、KL或value网络；默认top-k采样与训练完整softmax概率不一致，不能据此声称标准无偏性已验证。&#10;位置：scripts/chat_rl.py:1 算法说明；scripts/chat_rl.py:264 logp/pg_obj">GRPO/PPO</abbr>（[释义](glossary/01-training-stages.md#term-grpo)）只用于算法对照，RL 实现不等于标准完整算法。没有 MoE、SwiGLU、cross-attention、奖励模型或价值网络。[scripts/infer_bench.py:99](/home/lizishuo/_program_/Project/nanochat/scripts/infer_bench.py:99) 帮助写 mid，但 load_model 只映射 base/sft/rl，不是 mid 阶段存在的证据。
+
+## 1.1 整体训练主线图
+
+从上到下阅读，箭头表示数据或权重交给下一节点。实线是从零获得对话模型的参考主线，虚线是已有权重入口或按任务选择的评估出口。纵向布局控制宽度；评估出口不表示本次已执行。失败后应调整实验另行训练，代码没有自动质量门禁。
+
+~~~mermaid
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
+flowchart TD
+    A["起点：环境 + 训练与验证语料"] --> B["分词器训练：词表 + token_bytes"]
+    B --> C["构建 GPT + 随机初始化"]
+    B -.-> P["固定词表与角色 / 工具协议"]
+    C --> D["普通文档编码装箱 → 预训练更新"]
+    D --> E["基础权重 + 配置 + 优化器分片"]
+    E --> F["加载基础权重 + 对话示范 → SFT"]
+    P --> F
+    X["可选入口：兼容基础权重与原词表"] -.-> F
+    E -.-> Q["基础评估出口：BPB / CORE / 续写"]
+    F --> G["SFT 权重 + 配置"]
+    G --> H["对话评估出口：ChatCORE + 生成"]
+    H --> I["交付：所选权重 + 原词表 + CLI"]
+    Q -.-> J["按目标交付基础模型"]
+    classDef data fill:#123d57,stroke:#7dd3fc,color:#ffffff,stroke-width:2px;
+    classDef train fill:#49306b,stroke:#d8b4fe,color:#ffffff,stroke-width:2px;
+    classDef artifact fill:#12463a,stroke:#6ee7b7,color:#ffffff,stroke-width:2px;
+    classDef eval fill:#674518,stroke:#fcd34d,color:#ffffff,stroke-width:2px;
+    class A,B,P data;
+    class C,D,F train;
+    class E,G,X,I,J artifact;
+    class Q,H eval;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
+~~~
+
+## 1.2 实际可选训练分支图
+
+仍从上到下读。第一图是追加任务训练，第二图是执行方式和实验规模选择，两者不能拼成必须依次通过的算法链。实线表示分支内部流向，虚线表示可选择进入；纵向分图减少拥挤。
+
+~~~mermaid
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
+flowchart TD
+    A["起点：SFT 权重 + 原词表"] -.-> B["可选 GSM8K RL：数学题提示"]
+    B --> C["当前模型多回答采样 + 工具结果"]
+    C --> D["奖励 → 组均值优势 → 策略梯度"]
+    D --> E["RL 权重 + model_config"]
+    E --> F["评估出口：pass@k / ChatCORE"]
+    A -.-> G["直接对话评估与 CLI"]
+    F --> H["交付所选阶段权重与原词表"]
+    classDef base fill:#12463a,stroke:#6ee7b7,color:#ffffff,stroke-width:2px;
+    classDef train fill:#49306b,stroke:#d8b4fe,color:#ffffff,stroke-width:2px;
+    classDef eval fill:#674518,stroke:#fcd34d,color:#ffffff,stroke-width:2px;
+    class A,E,H base;
+    class B,C,D train;
+    class F,G eval;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
+~~~
+
+~~~mermaid
+%%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
+flowchart TD
+    A["起点：准备好的语料与词表"] -.-> B["执行选项：常规精度 / 兼容硬件 FP8"]
+    B --> C["base_train：一次基础训练"]
+    A -.-> D["研究选项：miniseries / scaling_laws"]
+    D --> E["不同深度或预算的独立基础训练"]
+    C --> F["评估出口：各自 BPB 与 CORE"]
+    E --> F
+    F --> G["选择实验权重进入主线或交付"]
+    classDef data fill:#123d57,stroke:#7dd3fc,color:#ffffff,stroke-width:2px;
+    classDef train fill:#49306b,stroke:#d8b4fe,color:#ffffff,stroke-width:2px;
+    classDef eval fill:#674518,stroke:#fcd34d,color:#ffffff,stroke-width:2px;
+    class A,G data;
+    class B,C,D,E train;
+    class F eval;
+    linkStyle default stroke:#3b82f6,stroke-width:3px;
+~~~
+
+[runs/miniseries.sh](/home/lizishuo/_program_/Project/nanochat/runs/miniseries.sh)、[runs/scaling_laws.sh](/home/lizishuo/_program_/Project/nanochat/runs/scaling_laws.sh) 反复调用同一 base_train，不新增训练算法。FP8 是计算加速选项，不是新阶段；<a id="ref-resume-001"></a><abbr title="Resume from Checkpoint｜断点恢复&#10;定义：读取被中断阶段保存的模型、优化器、循环/数据状态以接续同一训练过程。&#10;作用：尽量维持中断前更新轨迹，区别于把旧权重用于新任务。&#10;本项目：base提供resume-from-step，加载每卡optimizer与loop_state，数据记pq_idx/rg_idx/epoch后从后一个行组继续。&#10;注意：未存装箱缓冲、预取batch、RNG、GradScaler，属于近似恢复；SFT/RL无同阶段恢复接口，改world size无状态迁移。&#10;位置：scripts/base_train.py:157 resuming；scripts/base_train.py:330 loader state；nanochat/dataloader.py:53 恢复">断点恢复</abbr>（[释义](glossary/06-checkpoints-and-resume.md#term-resume)）是原训练接续机制，见第 10 章，不与跨阶段热启动混淆。
