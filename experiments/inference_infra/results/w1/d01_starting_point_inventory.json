@@ -1,0 +1,262 @@
+{
+  "minimind_root": "/home/lizishuo/_program_/Project/minimind",
+  "candidates": [
+    {
+      "directory": "/home/lizishuo/_program_/Project/minimind/experiments/minimind_baseline",
+      "files": [
+        {
+          "relative_path": "README.md",
+          "exists": false
+        },
+        {
+          "relative_path": "reports/reproduction.md",
+          "exists": false
+        },
+        {
+          "relative_path": "results/tables/kv_cache.csv",
+          "exists": false
+        },
+        {
+          "relative_path": "results/tables/d14_clean_kv_cache.csv",
+          "exists": false
+        },
+        {
+          "relative_path": "results/tables/generation_benchmark_raw.csv",
+          "exists": false
+        },
+        {
+          "relative_path": "results/tables/d14_clean_benchmark_raw.csv",
+          "exists": false
+        }
+      ]
+    },
+    {
+      "directory": "/home/lizishuo/_program_/Project/minimind/experiments/archive/minimind_baseline-before-embedding-20261014",
+      "files": [
+        {
+          "relative_path": "README.md",
+          "exists": true,
+          "bytes": 8150,
+          "sha256": "076b09ac5b856c6b50a5453eeb44771eedfe09a8fd4b9abc97239161e2868bd8"
+        },
+        {
+          "relative_path": "reports/reproduction.md",
+          "exists": true,
+          "bytes": 1624,
+          "sha256": "8ed63ea6b6e08e2b984466c7ec72406c4887d865922c8fc87ad98402fbef84a0"
+        },
+        {
+          "relative_path": "results/tables/kv_cache.csv",
+          "exists": true,
+          "bytes": 1821,
+          "sha256": "39bae6cf2fe800562e85b9676687a4242f6c40bbb725934cc44015c0def788f1",
+          "columns": [
+            "step",
+            "layer",
+            "prompt_len",
+            "input_len_this_step",
+            "past_len",
+            "k_shape",
+            "v_shape",
+            "layer_kv_bytes",
+            "theoretical_all_layers_kv_bytes",
+            "max_abs_logit_diff",
+            "cache_token",
+            "no_cache_token",
+            "dtype",
+            "atol_rtol"
+          ],
+          "rows": 16,
+          "max_abs_logit_diff": 2.384185791015625e-06
+        },
+        {
+          "relative_path": "results/tables/d14_clean_kv_cache.csv",
+          "exists": true,
+          "bytes": 1821,
+          "sha256": "39bae6cf2fe800562e85b9676687a4242f6c40bbb725934cc44015c0def788f1",
+          "columns": [
+            "step",
+            "layer",
+            "prompt_len",
+            "input_len_this_step",
+            "past_len",
+            "k_shape",
+            "v_shape",
+            "layer_kv_bytes",
+            "theoretical_all_layers_kv_bytes",
+            "max_abs_logit_diff",
+            "cache_token",
+            "no_cache_token",
+            "dtype",
+            "atol_rtol"
+          ],
+          "rows": 16,
+          "max_abs_logit_diff": 2.384185791015625e-06
+        },
+        {
+          "relative_path": "results/tables/generation_benchmark_raw.csv",
+          "exists": true,
+          "bytes": 6755,
+          "sha256": "7466fd13c41ce6737dd23c98a4bd10ac7909932b30d87c00d8c6e5479a0803d5",
+          "columns": [
+            "prompt_tokens",
+            "generated_tokens",
+            "batch",
+            "cache",
+            "repetition",
+            "device",
+            "dtype",
+            "warmup",
+            "seed",
+            "ttft_ms",
+            "tpot_ms",
+            "decode_tokens_per_second",
+            "total_ms",
+            "peak_allocated_mb"
+          ],
+          "rows": 60,
+          "repetitions_per_group": {
+            "32|32|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "32|32|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "32|128|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "32|128|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "128|32|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "128|32|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "128|128|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "128|128|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "512|32|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "512|32|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "512|128|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "512|128|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ]
+          }
+        },
+        {
+          "relative_path": "results/tables/d14_clean_benchmark_raw.csv",
+          "exists": true,
+          "bytes": 2335,
+          "sha256": "a837996ad10ed6691f6bb6478a67f223c945cf709736ab132cbe11f550f95cec",
+          "columns": [
+            "prompt_tokens",
+            "generated_tokens",
+            "batch",
+            "cache",
+            "repetition",
+            "device",
+            "dtype",
+            "warmup",
+            "seed",
+            "ttft_ms",
+            "tpot_ms",
+            "decode_tokens_per_second",
+            "total_ms",
+            "peak_allocated_mb"
+          ],
+          "rows": 20,
+          "repetitions_per_group": {
+            "32|32|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "32|32|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "128|32|1|on|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "128|32|1|off|cpu|float32": [
+              "0",
+              "1",
+              "2",
+              "3",
+              "4"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "interpretation": "File existence and recorded values only; not a new correctness run."
+}
