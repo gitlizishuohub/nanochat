@@ -1,7 +1,6 @@
 ---
 doc_role: training-workflow
 source_revision: fbc049f379926ecdb49071a129586278245d71c2
-review_date: 2026-10-12
 source_files:
   - nanochat/gpt.py
   - nanochat/tokenizer.py
@@ -41,7 +40,7 @@ source_symbols:
 
 [返回栏目](../README.md)
 
-本表是 2026-10-12 的调用关系快照，用于按主题查源码；不是正文第一课，也不表示本轮重新审阅了全部源文件。
+本表是原有调用关系快照，用于按主题查源码；不是正文第一课，也不表示本轮重新审阅了全部源文件。
 
 <a id="sec-1"></a>
 

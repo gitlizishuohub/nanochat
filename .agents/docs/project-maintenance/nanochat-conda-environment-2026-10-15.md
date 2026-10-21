@@ -8,7 +8,7 @@ source_files:
 doc_type: reference
 ---
 
-# nanochat Conda 环境验证记录（2026-10-15）
+# nanochat Conda 环境验证记录
 
 按用户要求创建名为 `nanochat` 的 <abbr title="Conda · Python 环境与软件包管理工具。命名环境将解释器及依赖与系统 Python 隔离；激活后 python 指向该环境。">Conda</abbr> 环境。环境路径为 `/home/lizishuo/miniconda3/envs/nanochat`，解释器为该目录的 `bin/python`。项目 `.python-version` 指定 3.10，本轮安装 Python 3.10.20。
 

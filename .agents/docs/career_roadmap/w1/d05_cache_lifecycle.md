@@ -122,7 +122,7 @@ python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mod
 
 这里“四步”包含 prefill 这一步，不等于四次 decode。复制后 K/V shape 为 `[2,4,64,2,16]`，单份 K 或 V 为 65,536 字节，两者合计 131,072 字节，不包含模型、位置向量、prev 和临时张量。
 
-编写时验证记录（2026-10-15）：Conda `nanochat` / torch 2.9.1+cpu 实测 4 步位置为 8、9、10、11；最大绝对 logits 差 `7.450580596923828e-09`，greedy token 一致；B=4 的 K/V 与 prev 复制、reset 均通过。这里只验证上述小配置，不外推 GPU、真实 checkpoint 或所有边界。
+编写时验证记录：Conda `nanochat` / torch 2.9.1+cpu 实测 4 步位置为 8、9、10、11；最大绝对 logits 差 `7.450580596923828e-09`，greedy token 一致；B=4 的 K/V 与 prev 复制、reset 均通过。这里只验证上述小配置，不外推 GPU、真实 checkpoint 或所有边界。
 
 ## 4. 当天自验证与交流问题及内存公式
 

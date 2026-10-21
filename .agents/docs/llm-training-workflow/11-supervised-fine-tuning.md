@@ -10,14 +10,13 @@ source_symbols:
   - load_model
 source_review:
   status: verified
-  reviewed_at: 2026-10-21
   source_commit: ae0c2733222f0e4791285955df099bb9e9073d44
   scope: SFT 加载、协议截断、装箱与目标、优化器继承、停止、评估及保存；仅静态核对
 ---
 
 [栏目目录](README.md) · [上一篇](10-logging-checkpoints-and-resume.md) · [下一篇](12-inference-and-generation.md) · [术语查阅](glossary/README.md)
 
-> 2026-10-21 对照相关源码串联 SFT 流程；只做静态核对，未执行训练。
+> 对照相关源码串联 SFT 流程；只做静态核对，未执行训练。
 
 # 11. 监督微调：从基础模型到对话模型
 
@@ -65,4 +64,4 @@ SFT默认继承base meta长度、每卡行数、总batch，以及base user_confi
 
 ## 11.6 源码核对范围
 
-2026-10-21 静态核对 [SFT 加载与参数继承](../../../scripts/chat_sft.py:94)、[装箱与目标对齐](../../../scripts/chat_sft.py:180)、[停止和训练循环](../../../scripts/chat_sft.py:263)、[保存分支](../../../scripts/chat_sft.py:391)及[来源映射](../../../nanochat/checkpoint_manager.py:167)；分词截断见[对话编码](../../../nanochat/tokenizer.py:140)。没有执行训练、数据下载或模型质量评价。
+静态核对 [SFT 加载与参数继承](../../../scripts/chat_sft.py:94)、[装箱与目标对齐](../../../scripts/chat_sft.py:180)、[停止和训练循环](../../../scripts/chat_sft.py:263)、[保存分支](../../../scripts/chat_sft.py:391)及[来源映射](../../../nanochat/checkpoint_manager.py:167)；分词截断见[对话编码](../../../nanochat/tokenizer.py:140)。没有执行训练、数据下载或模型质量评价。

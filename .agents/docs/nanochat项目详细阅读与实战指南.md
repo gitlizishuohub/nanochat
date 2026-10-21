@@ -3,7 +3,7 @@
 > 配套课件：`LLM_PyTorch_Transformer_Foundations_Detailed.pptx`  
 > 对照项目：[karpathy/nanochat](https://github.com/karpathy/nanochat)  
 > 推荐前置：配套 PPT → `nanoGPT项目详细阅读与实战指南.md` → MiniMind Dense/SFT 主线  
-> 核对版本：2026-09-08，GitHub `master` 分支。nanochat 仍在快速演进，命令、默认值和实验结构可能变化，应以当前源码和 `runs/` 脚本为准。
+> 核对来源：GitHub `master` 分支。nanochat 仍在快速演进，命令、默认值和实验结构可能变化，应以当前源码和 `runs/` 脚本为准。
 
 ---
 

@@ -1,4 +1,4 @@
-# W1–W3 命名与每日清单核验（2026-10-20）
+# W1–W3 命名与每日清单核验
 
 21 篇每日教程使用全程 `d01_`–`d21_` 前缀，保留主题名和 `Wn Dn` 标题；13 个脚本按首次使用日命名并保留在对应周的 `scripts/`。不增加周 README。入口为 [W1 D1](../career_roadmap/w1/d01_starting_point.md)、[W2 D1](../career_roadmap/w2/d08_data_prerequisites.md)、[W3 D1](../career_roadmap/w3/d15_resume_draft.md)。
 
@@ -31,4 +31,4 @@
 
 没有执行真实 2 步或 20 步训练，也没有产生真实训练 checkpoint 的性能结果；没有 CUDA/FA3 或 GPU 显存测量。未在阅读器中验收术语悬停和完整页面渲染。脚本测试和文档核验不表示用户已完成每日实验；原计划日期不变成完成日期。
 
-已有 `experiments/`、`.vscode/` 和未跟踪的总计划保留；本轮不把已有实验或外部 MiniMind 历史证据重命名。此前的 [2026-10-15 验证记录](career-roadmap-guides-validation-2026-10-15.md) 仅维护现行导航，保留当时的结果与临时证据路径。
+已有 `experiments/`、`.vscode/` 和未跟踪的总计划保留；本轮不把已有实验或外部 MiniMind 历史证据重命名。此前的 [原交付验证记录](career-roadmap-guides-validation-2026-10-15.md) 仅维护现行导航，保留当时的结果与临时证据路径。

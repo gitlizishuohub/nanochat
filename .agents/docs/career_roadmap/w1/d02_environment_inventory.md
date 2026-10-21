@@ -47,7 +47,7 @@ knowledge_scope: W1 D2 Conda环境与硬件事实盘点
 
 ## 1. 固定解释器，不另建虚拟环境
 
-本轮应用户要求已经创建 <abbr title="Conda environment · Conda 管理的独立 Python 环境。激活后终端中的 python 和已安装包应来自同一前缀；创建成功仅证明解释器存在，不证明全部项目依赖已安装。">Conda 环境</abbr> `nanochat`，Python 为 3.10.20。2026-10-15 编写本指导时，CPU/dev 依赖安装已经完成，实测 PyTorch 为 `2.9.1+cpu`，CPU/FP32/SDPA 可运行，CUDA 不可用。完整安装与导入验证记录见[Conda 环境记录](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)。这只是编写时的本机事实，读者仍需重新采集自己的环境卡。以后各日均使用这一个环境：
+本轮应用户要求已经创建 <abbr title="Conda environment · Conda 管理的独立 Python 环境。激活后终端中的 python 和已安装包应来自同一前缀；创建成功仅证明解释器存在，不证明全部项目依赖已安装。">Conda 环境</abbr> `nanochat`，Python 为 3.10.20。编写本指导时，CPU/dev 依赖安装已经完成，实测 PyTorch 为 `2.9.1+cpu`，CPU/FP32/SDPA 可运行，CUDA 不可用。完整安装与导入验证记录见[Conda 环境记录](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)。这只是编写时的本机事实，读者仍需重新采集自己的环境卡。以后各日均使用这一个环境：
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat

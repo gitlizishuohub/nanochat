@@ -1,7 +1,6 @@
 ---
 doc_role: training-workflow
 source_revision: fbc049f379926ecdb49071a129586278245d71c2
-review_date: 2026-10-12
 source_files:
   - nanochat/gpt.py
   - nanochat/tokenizer.py

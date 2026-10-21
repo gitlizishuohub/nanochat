@@ -1,7 +1,6 @@
 ---
 doc_role: training-workflow
 source_revision: fbc049f379926ecdb49071a129586278245d71c2
-review_date: 2026-10-12
 source_files:
   - nanochat/gpt.py
   - nanochat/tokenizer.py
@@ -39,7 +38,7 @@ source_symbols:
 
 [栏目目录](README.md) · [上一篇](08-precision-and-training-acceleration.md) · [下一篇](10-logging-checkpoints-and-resume.md) · [术语查阅](glossary/README.md)
 
-> 原技术正文沿用 2026-10-12 的源码核对记录；2026-10-21 调整结构。新增 SFT 串联说明做了局部静态核对，未执行训练。
+> 原技术正文沿用原有源码核对记录；后续调整了结构。新增 SFT 串联说明做了局部静态核对，未执行训练。
 
 # 9. 多卡分工与优化器通信
 
