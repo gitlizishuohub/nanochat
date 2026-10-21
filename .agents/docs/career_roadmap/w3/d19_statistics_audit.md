@@ -16,6 +16,16 @@ knowledge_scope: W3第5日实操与验收
 
 [上一日](d18_batch_runs.md) · [下一日](d20_reproduction_entry.md)。
 
+## 当天的流程阅读
+
+先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+
+- **阅读入口：**[13.1 四种评价出口](../../llm-training-workflow/13-evaluation-and-metrics.md#reading-13-1)；[13.2 能力与系统性能的边界](../../llm-training-workflow/13-evaluation-and-metrics.md#reading-13-2)。
+- **今天重点：**完整认识四种能力评价出口，再回到当天统计复算，明确损失、任务正确率、推理延迟和吞吐各自的统计对象。
+- **暂时跳过：**能力指标公式只需能解释分子、分母与范围；不必下载全部评测任务或运行能力评测。
+
+**读完能解释：**<abbr title="BPB / Bits per Byte · 每字节比特数；用有效目标负对数似然和字节数衡量预测误差。">BPB</abbr>、任务准确率与 <abbr title="TPOT / Time per Output Token · 首词元之后的平均输出间隔；具体统计以当日协议为准。">TPOT</abbr> 分别评价什么？为什么一个指标变好不代表另外两个也变好？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+
 ## 开始前：固定终端和记录方式
 
 本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。

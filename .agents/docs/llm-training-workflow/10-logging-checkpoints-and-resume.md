@@ -45,12 +45,14 @@ source_symbols:
 
 <a id="sec-9"></a>
 
+<a id="reading-10-1"></a>
 ## 10.1 日志口径
 
 <a id="ref-logging-001"></a><abbr title="Logging / W&amp;B / EMA / MFU｜日志、实验记录、平滑与算力利用率&#10;定义：日志保存过程指标，EMA平滑曲线，MFU用估算FLOPs吞吐除以设备理论峰值。&#10;作用：观察收敛/吞吐变化并比较实验，必须明确指标统计范围和预算。&#10;本项目：run=dummy用DummyWandb，base每100/SFT每10步记录；loss末微批再EMA，训练计时排除前10步与评估。&#10;注意：非端到端耗时，SFTtoken吞吐含提示/补齐；MFU硬编码峰值/结构估算，CPU或未知设备0不意味着无计算。&#10;位置：nanochat/common.py:216 DummyWandb；scripts/base_train.py:548 日志；scripts/chat_sft.py:461 日志">日志/W&amp;B/EMA/MFU</abbr>（[释义](glossary/06-checkpoints-and-resume.md#term-logging)）：run=dummy默认不上传，只有rank0且非dummy才创建真实run。base每100步、SFT每10步记录训练指标；RL记录奖励与序列长度。loss为最后微批值再做beta0.9平滑，不是模型参数EMA，也不是整步精确均值。
 
 SFT吞吐含提示与补齐容量；训练时间排除前10更新，仅加训练step耗时，不含完整准备、编译、验证和保存，因此不能声称端到端用时。MFU峰值来自硬编码表、FLOPs来自结构估算，未知设备/CPU/MPS显示0不等于未计算。
 
+<a id="reading-10-2"></a>
 ## 10.2 文件职责与保存时点
 
 <a id="ref-checkpoint-001"></a><abbr title="Checkpoint｜检查点&#10;定义：保存某个训练时刻的权重与辅助状态，让模型能加载、评估、阶段接续或部分恢复。&#10;作用：保留昂贵训练成果，区分推理所需资产与接续优化所需状态。&#10;本项目：rank0存model_XXXXXX.pt/meta.json，base/SFT各rank存optim分片，RL仅模型与model_config。&#10;注意：词表独立目录；同tag/step文件需配套。保存非原子事务，最大step不等于最优；RL零基更新后步号与其它阶段不同。&#10;位置：nanochat/checkpoint_manager.py:41 save_checkpoint；scripts/base_train.py:478 保存；scripts/chat_rl.py:314 保存">检查点</abbr>（[释义](glossary/06-checkpoints-and-resume.md#term-checkpoint)）默认在get_base_dir缓存目录，不在Git项目根目录：
@@ -77,6 +79,7 @@ base默认末尾保存，可正save_every定期存，不在step0或刚恢复那�
 
 base meta含model_config、user_config、batch配置、dataloader_state_dict、loop_state、上次val_bpb；SFT无消费游标和loop_state；RL仅model_config，连meta.step也无。分词器独立保存，不含在权重文件。逐文件直接写，不是原子整组事务；跟踪min_val_bpb不等于按最优保存，默认最大step也不代表最好模型。
 
+<a id="reading-10-3"></a>
 ## 10.3 真实恢复与跨阶段加载
 
 <a id="ref-resume-002"></a><abbr title="Resume from Checkpoint｜断点恢复&#10;定义：读取被中断阶段保存的模型、优化器、循环/数据状态以接续同一训练过程。&#10;作用：尽量维持中断前更新轨迹，区别于把旧权重用于新任务。&#10;本项目：base提供resume-from-step，加载每卡optimizer与loop_state，数据记pq_idx/rg_idx/epoch后从后一个行组继续。&#10;注意：未存装箱缓冲、预取batch、RNG、GradScaler，属于近似恢复；SFT/RL无同阶段恢复接口，改world size无状态迁移。&#10;位置：scripts/base_train.py:157 resuming；scripts/base_train.py:330 loader state；nanochat/dataloader.py:53 恢复">预训练恢复</abbr>（[释义](glossary/06-checkpoints-and-resume.md#term-resume)）有--resume-from-step，需同tag/step的model/meta与每rank优化器。下面是假设原运行已用相同配置并存在step500的格式示例，本次未执行：

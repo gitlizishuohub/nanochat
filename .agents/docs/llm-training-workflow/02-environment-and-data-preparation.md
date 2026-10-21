@@ -45,6 +45,7 @@ source_symbols:
 
 <a id="sec-3"></a>
 
+<a id="reading-2-1"></a>
 ## 2.1 本地环境入口
 
 本项目每日学习采用已有的 `nanochat` <abbr title="Conda · 管理独立 Python 解释器与依赖的工具；此处使用名为 nanochat 的既有环境。">Conda</abbr> 环境，先按[环境验证记录](../project-maintenance/nanochat-conda-environment-2026-10-15.md)激活并重新盘点。历史版本和测试记录不代替当前复查。以下 uv 命令是上游独立环境的复建参考，不是要求在现有 Conda 环境外再创建一套环境。
@@ -65,6 +66,7 @@ compute_init 设 torch 种子 42，设备优先 CUDA→MPS→CPU。<a id="ref-di
 
 实现边界：dataset.py import requests，base_eval/core_eval 使用 yaml/jinja2，但核心依赖列表未逐项显式声明它们，可能经传递依赖获得；本次未验证安装或导入，不能保证所有入口现已可运行。kernels 首次加载可能联网，本文未触发。
 
+<a id="reading-2-2"></a>
 ## 2.2 语料下载、划分与适配
 
 <a id="ref-parquet-001"></a><abbr title="Parquet / Shard / Row Group｜列式文件、分片与行组&#10;定义：Parquet是列式文件，shard为数据文件分片，row group是一个文件内部按块可读取的行集合。&#10;作用：让大规模语料按文件下载、按行组读列和分配给rank，避免整库载入内存。&#10;本项目：ClimbMix文件读取text列，默认base_data_climbmix；-n8取8训练文件并追加06542验证，装载器末文件作val。&#10;注意：row group不同于模型行或batch；自备文件需保证最后文件的验证安排，MAX_SHARD6542是末索引并非总文件数。&#10;位置：nanochat/dataset.py:23 BASE_URL；nanochat/dataset.py:67 parquets_iter_batched；nanochat/dataloader.py:25 _document_batches">Parquet 分片</abbr>（[释义](glossary/02-data-and-protocol.md#term-parquet)）当前使用代码配置的 karpathy/climbmix-400b-shuffle，默认 base_data_climbmix。新目录不存在时可回退旧 base_data。装载器按文件排序后以最后一个文件为 val、其它为 train，不是随机 9:1。官方下载器总会额外下载固定 shard_06542.parquet 作验证。

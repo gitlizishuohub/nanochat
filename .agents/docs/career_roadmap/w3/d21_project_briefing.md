@@ -16,6 +16,16 @@ knowledge_scope: W3第7日实操与验收
 
 [上一日](d20_reproduction_entry.md) · [后续周次总计划](../nanochat_daily_execution_2026-10-01.md)。
 
+## 当天的流程阅读
+
+先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+
+- **阅读入口：**[1.1 整体训练主线图](../../llm-training-workflow/01-training-pipeline-and-optional-branches.md#reading-1-1)；[11.5 保存、评价与下一阶段](../../llm-training-workflow/11-supervised-fine-tuning.md#reading-11-5)；[14.1 提示、生成、奖励与有效目标](../../llm-training-workflow/14-gsm8k-reinforcement-learning.md#reading-14-1)；[15.3 交付资产与部署边界](../../llm-training-workflow/15-running-examples-and-delivery.md#reading-15-3)。
+- **今天重点：**先用主线图串讲已做的实验，再把 <abbr title="SFT / Supervised Fine-Tuning · 监督微调；用示范对话中的助手目标更新基础模型。">SFT</abbr> 产物与可选数学奖励训练放到正确位置。<abbr title="RL / Reinforcement Learning · 强化学习；此处指利用生成回答的数学奖励进一步更新模型。">RL</abbr> 小节先读输入、生成回答和奖励的关系，不展开更新公式。
+- **暂时跳过：**RL 算法、SFT 深入继承、多卡通信和 <abbr title="FP8 · 8 位浮点计算；本项目的可选训练加速方式，需要兼容硬件。">FP8</abbr> 内核不作为 D21 验收要求；以后按方向深读。
+
+**读完能解释：**能否从文本、分词、训练、权重、生成、评估讲到交付，并逐段指出已做、仅理解和仍待验证的部分？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+
 ## 开始前：固定终端和记录方式
 
 本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。

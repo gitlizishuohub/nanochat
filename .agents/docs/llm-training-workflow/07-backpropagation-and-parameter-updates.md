@@ -44,6 +44,7 @@ source_symbols:
 # 7. 反向传播、优化器与训练预算
 
 <a id="sec-8"></a>
+<a id="reading-7-1"></a>
 ## 7.1 一次更新的真实次序
 
 预训练/SFT用<a id="ref-compile-001"></a><abbr title="torch.compile / Static Shape｜图编译与固定形状&#10;定义：把PyTorch运算路径捕获为可优化计算图，通过融合等方式降低重复调度成本。&#10;作用：加速固定B/T的重复前向/反向和优化器步骤，不改变训练目标定义。&#10;本项目：base/SFT模型dynamic=False，优化器fused函数也编译；保留orig_model供保存/变长生成，FP8替换在编译前。&#10;注意：编译可能有初期开销，不是算法或质量验证；没有实际跑过就不能承诺加速，RL没有torch.compile(model)调用。&#10;位置：scripts/base_train.py:246 orig_model/compile；scripts/chat_sft.py:117 compile；nanochat/optim.py:23 编译装饰器">torch.compile(dynamic=False)</abbr>（[释义](glossary/05-loss-and-parameter-updates.md#term-compile)）优化固定形状路径，保留orig_model保存原始权重键名与变长生成。每微批forward求loss，除累积次数A，<a id="ref-backprop-001"></a><abbr title="Autograd / Backward｜自动微分与反向传播&#10;定义：沿前向计算图使用链式法则计算损失对可学习张量的导数，并写入参数梯度。&#10;作用：告诉优化器沿哪些方向调整数值可改善当前目标，连接预测误差与参数更新。&#10;本项目：训练调用loss.backward或scaler.scale(loss).backward，微批累加，更新后zero_grad(set_to_none=True)。&#10;注意：backward只求梯度，optimizer.step才改权重；model.eval不关闭求导，验证no_grad、Engine inference_mode才限制梯度记录。&#10;位置：scripts/base_train.py:511 单步；scripts/chat_sft.py:430 backward；nanochat/engine.py:176 generate">backward</abbr>（[释义](glossary/05-loss-and-parameter-updates.md#term-backprop)）累加梯度；完成A批后应用调度、优化器同步并更新，最后zero_grad(set_to_none=True)。日志取最后微批loss再平滑，不是精确整步平均。
@@ -93,6 +94,7 @@ $$
 
 入口学习率乘sqrt(B/524288)，再由组构造处理宽度等倍率，Smear组固定率不经过传入lr的缩放；每step再乘<a id="ref-lr-001"></a><abbr title="Learning Rate / Warmup / Warmdown｜学习率与升降温&#10;定义：学习率控制更新幅度，warmup初期增大，warmdown后期减小，不是模型前向可学习权重。&#10;作用：兼顾训练初期稳定、主体推进和结束收敛，不同参数组可有不同基准。&#10;本项目：base40步升温、后65%降到倍率0.05；SFT初始0.8、后半降0；RL初始0.05、按step线性降。&#10;注意：入口lr还受batch/宽度与组倍率影响；短跑warmup条件优先，RL最后更新不精确0，SFT progress未clamp可越界。&#10;位置：scripts/base_train.py:360 get_lr_multiplier；scripts/chat_sft.py:307 调度；scripts/chat_rl.py:210 调度">学习率调度</abbr>（[释义](glossary/05-loss-and-parameter-updates.md#term-lr)）倍率。Muon decay先按sqrt(B/Bref)×Dref/Dtarget缩放，再余弦下降，AdamW组固定decay。Muon momentum前400步优先从0.85向0.97变，后续降温段向0.90变；短跑不会完全经历理想调度曲线。
 
+<a id="reading-7-4"></a>
 ## 7.4 一次更新的流程图
 
 从上到下；实线为常规更新，虚线为fp16选择路径，循环箭头表示继续微批。直接路线和缩放路线择一；fp16必须先unscale/溢出判断。没有把不存在的裁剪插成必需步骤。

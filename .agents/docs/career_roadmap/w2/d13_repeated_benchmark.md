@@ -20,6 +20,16 @@ knowledge_scope: W2第6天实操与验收
 
 前一天：[返回前一天](d12_benchmark_schema.md)；后一天：[继续下一天](d14_matrix_smoke.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
+## 当天的流程阅读
+
+先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+
+- **阅读入口：**[12.2 生成控制流与返回格式](../../llm-training-workflow/12-inference-and-generation.md#reading-12-2)；[10.1 日志口径](../../llm-training-workflow/10-logging-checkpoints-and-resume.md#reading-10-1)。
+- **今天重点：**回读实际输出长度、终止条件与日志统计范围，逐项对应今天的预热、正式记录和自动汇总。今天主要做应用回查，不增加新训练概念。
+- **暂时跳过：**不用重读已掌握的整章；不把观察单次数字当作重复测量完成。
+
+**读完能解释：**如果一次生成提前结束，直接用要求的生成长度作吞吐分子，会产生什么问题？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+
 ## 开始前：固定 shell 与结果位置
 
 所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。

@@ -45,6 +45,7 @@ source_symbols:
 
 <a id="sec-7"></a>
 
+<a id="reading-6-1"></a>
 ## 6.1 先理解基本前向
 
 先看维度变化：整数词元 `[B,T]` → 嵌入 `[B,T,C]` → 多层注意力与前馈变换 `[B,T,C]` → 词表分数 `[B,T,V]`。有目标时再计算损失；没有目标时由生成器选取下一词元。注意力负责聚合可访问的上下文，前馈层在每个位置变换特征。
@@ -76,6 +77,7 @@ $$
 
 所有Linear无bias，RMSNorm无可学习gamma，输入输出不绑权重，没有dropout。没有门控SwiGLU、MoE或编码器cross-attention。模型外层还先用 resid_lambdas×x+x0_lambdas×x0，每个Value Embedding层把3×sigmoid门控后的值表加到V；Smear读前24通道，值门控读前12通道。Backout缓存零基索引L//2层的输出，最终减可学习比例，不是回滚训练。
 
+<a id="reading-6-2"></a>
 ## 6.2 注意力方向、窗口与RoPE
 
 单头概念式（Q/K已旋转、归一化并各乘1.2）：
@@ -90,6 +92,7 @@ M在不可访问位置等效负无穷，SDPA布尔mask代表允许的位置。�
 
 RoPE base=100000，完整cos/sin缓存[1,10×sequence_len,1,D/2]，使用末轴前后两半配对的负角度约定，不新增绝对位置表。10倍预计算余量不证明10倍上下文质量，窗口仍受配置限制。
 
+<a id="reading-6-3"></a>
 ## 6.3 logits、目标对齐与有效监督
 
 <a id="ref-logits-001"></a><abbr title="Logits / Softmax / Softcap｜预测分数、概率归一化与软限幅&#10;定义：logits是未归一化类别分数，softmax将其转为概率，softcap光滑限制数值幅度。&#10;作用：为训练分类损失与生成采样提供共同输出，并避免过大的预测分数。&#10;本项目：lm_head产生[B,T,Vpad]、裁V、转fp32，15×tanh(z/15)；CE内部归一化，生成另按温度/top-k softmax。&#10;注意：logits不是概率或文本，softcap不是硬clip/梯度裁剪；无targets时返回分数，生成函数负责选ID。&#10;位置：nanochat/gpt.py:511 logits；nanochat/engine.py:141 sample_next_token">logits</abbr>（[释义](glossary/04-model-and-forward-pass.md#term-logits)）转fp32，按15×tanh(z/15)软限幅，再供损失和采样：

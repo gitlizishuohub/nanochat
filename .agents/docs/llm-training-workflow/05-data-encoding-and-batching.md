@@ -45,6 +45,7 @@ source_symbols:
 
 <a id="sec-6"></a>
 
+<a id="reading-5-1"></a>
 ## 5.1 预训练：装满 T+1 然后 shift
 
 自定义<a id="ref-loader-001"></a><abbr title="DataLoader / Generator｜数据装载器与生成器&#10;定义：把原始样本编码、装箱、构造目标并搬到设备的迭代接口，不要求使用某个同名框架类。&#10;作用：连接磁盘数据和模型循环，让每次前向获得形状/监督语义一致的输入。&#10;本项目：预训练为无限Python生成器并复用缓冲；SFT装载器定义在脚本内；RL get_batch还现场生成、判奖励。&#10;注意：未使用torch.utils.data.DataLoader、DistributedSampler或统一collate_fn；复用预训练缓冲时需长期持有旧batch应复制。&#10;位置：nanochat/dataloader.py:74 主生成器；scripts/chat_sft.py:180 SFT生成器；scripts/chat_rl.py:86 get_batch">数据生成器</abbr>（[释义](glossary/03-batching-and-distributed-training.md#term-loader)）读取 text 行组，在线分词并 prepend BOS。<a id="ref-packing-001"></a><abbr title="Packing / Best Fit｜拼接装箱与最佳适配&#10;定义：把变长文档/对话放进固定容量行，优先挑能完整装入剩余空间的最长样本。&#10;作用：减少空位浪费，复用固定形状前向，并使每行从完整文档/对话边界开始。&#10;本项目：预训练缓冲1000，装不下裁最短文档；SFT缓冲100，装不下补BOS/0mask，行容量T+1再shift。&#10;注意：没有按文档分块的attention mask；SFT装箱不裁剪不代表上游render_conversation没截断，后文仍可看前文。&#10;位置：nanochat/dataloader.py:74 主生成器；scripts/chat_sft.py:180 SFT生成器">best-fit packing</abbr>（[释义](glossary/02-data-and-protocol.md#term-packing)）从默认 1000 文档缓冲选择能装入剩余空间的最长文档；都装不下时裁最短文档前缀填满，弃尾。行容量 T+1，不进行序列 padding。
@@ -64,6 +65,7 @@ CPU 行缓冲 [B,T+1]，inputs/targets 均 long [B,T]；设备缓冲复用，搬
 
 <a id="ref-truncate-001"></a><abbr title="Truncation / Cropping｜截断与裁切&#10;定义：长度预算不足时只保留序列前缀或指定片段，丢弃超出范围的数据。&#10;作用：控制上下文和显存，但可能丢失回答、停止标记或监督位置，需定位发生层次。&#10;本项目：tok_train每文档最多10000字符；预训练装箱裁尾；render_conversation默认前2048个ID和mask，SFT调用没传新上限。&#10;注意：字符限制不同于token限制；改变SFT行长不改变2048裁切，过短行可能装不进缓冲长对话，不能笼统说SFT不丢数据。&#10;位置：scripts/tok_train.py:28 text_iterator；nanochat/tokenizer.py:221 截断；scripts/chat_sft.py:208 调用">裁切</abbr>（[释义](glossary/02-data-and-protocol.md#term-truncate)）丢弃的是数据尾部。所有目标参与训练 CE，包括内部 BOS；BPB 才过滤特殊目标。后一个文档可看见前一个文档的过去 token，没有 block-diagonal attention mask。
 
+<a id="reading-5-2"></a>
 ## 5.2 SFT：先截对话、再装箱补齐
 
 任务混合、验证集来源与消费结束条件统一见[SFT 全流程](11-supervised-fine-tuning.md)。本节只解释编码后的对话如何装箱、补齐并与目标对齐。
@@ -82,6 +84,7 @@ y最终=[-1,-1,-1,-1,答,AE,-1]
 
 模型在 AS 位置预测“答”、在“答”位置预测 AE。<a id="ref-lossmask-002"></a><abbr title="Loss Mask / Ignore Index｜监督掩码与忽略标签&#10;定义：标记哪些目标位置有效的数组/哨兵，用来决定计算损失的范围。&#10;作用：只监督期望模型生成的行为，同时保留用户提示和外部结果作上下文。&#10;本项目：render_conversation给0/1，SFT shift后0位置targets=−1；cross_entropy(ignore_index=−1)，RL用Engine采样mask同样过滤。&#10;注意：不是attention mask；assistant_start不监督、SFT assistant_end监督。全−1均值CE可能NaN，入口没有样本级过滤保证。&#10;位置：nanochat/tokenizer.py:140 render_conversation；scripts/chat_sft.py:290 mask_targets；nanochat/gpt.py:520 cross_entropy">mask_targets</abbr>（[释义](glossary/02-data-and-protocol.md#term-lossmask)）=mask[:,1:]，不能取 mask[:,:-1]。SFT inputs 为 int32、targets 为 int64；补齐边界从 content_len−1 起另设−1。用户/工具结果仍参与上下文计算，仅它们的目标损失被忽略。
 
+<a id="reading-5-3"></a>
 ## 5.3 batch、epoch 和每卡分配
 
 <a id="ref-batch-001"></a><abbr title="Batch / Micro-batch / Effective Batch｜批次、微批与有效批次&#10;定义：微批是一次每卡前向/反向处理的序列集合，有效批次是一次优化更新累计处理的总量。&#10;作用：将显存容得下的小批次累计为目标规模，区分序列数、题数与token数。&#10;本项目：预训练/SFT总token容量=B×T×world_size×累积次数；device-batch-size是每卡行数，total-batch-size是全局token。&#10;注意：SFT容量含padding/提示，不等于监督token；RL examples-per-step为题数、num-samples为每题回答，不能混套单位。&#10;位置：scripts/base_train.py:410 累积计算；scripts/chat_sft.py:121 批量计算；scripts/chat_rl.py:217 每卡题数">有效 batch</abbr>（[释义](glossary/03-batching-and-distributed-training.md#term-batch)）的单位在预训练/SFT为全局词元容量：

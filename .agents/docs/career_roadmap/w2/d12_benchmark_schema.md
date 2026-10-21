@@ -20,6 +20,16 @@ knowledge_scope: W2第5天实操与验收
 
 前一天：[返回前一天](d11_checkpoint_generation.md)；后一天：[继续下一天](d13_repeated_benchmark.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
+## 当天的流程阅读
+
+先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+
+- **阅读入口：**[10.1 日志口径](../../llm-training-workflow/10-logging-checkpoints-and-resume.md#reading-10-1)；[13.2 能力与系统性能的边界](../../llm-training-workflow/13-evaluation-and-metrics.md#reading-13-2)。
+- **今天重点：**了解训练日志的耗时与吞吐口径，再对照今天的推理协议，明确计时起止、分母、预热和失败行。
+- **暂时跳过：**本栏目的训练吞吐不是推理指标公式；具体测量定义仍以当天教程和脚本为准。
+
+**读完能解释：**为什么训练日志中的 tokens/s 不能直接与 Engine 的生成吞吐放在一列比较？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+
 ## 开始前：固定 shell 与结果位置
 
 所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。

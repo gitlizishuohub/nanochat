@@ -16,6 +16,16 @@ knowledge_scope: W3第6日实操与验收
 
 [上一日](d19_statistics_audit.md) · [下一日](d21_project_briefing.md)。
 
+## 当天的流程阅读
+
+先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+
+- **阅读入口：**[15.1 运行前的条件](../../llm-training-workflow/15-running-examples-and-delivery.md#reading-15-1)；[15.3 交付资产与部署边界](../../llm-training-workflow/15-running-examples-and-delivery.md#reading-15-3)。
+- **今天重点：**把复现入口需要的环境、模型、词表、配置和结果范围列全，逐项对应本项目已有文件与仍未执行的条件。
+- **暂时跳过：**15.2 只对照入口与前置条件，不复制运行整套训练；不存在的部署形态不写成已交付。
+
+**读完能解释：**一个同学拿到你的复现入口，还必须拿到哪些资产，才能运行同一模型并复核同一结果？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+
 ## 开始前：固定终端和记录方式
 
 本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。

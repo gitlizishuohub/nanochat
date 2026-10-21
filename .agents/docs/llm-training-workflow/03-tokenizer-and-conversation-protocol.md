@@ -45,6 +45,7 @@ source_symbols:
 
 <a id="sec-4"></a>
 
+<a id="reading-3-1"></a>
 ## 3.1 训练词表与配套产物
 
 <a id="ref-bpe-001"></a><abbr title="BPE / Byte Pair Encoding｜字节对编码&#10;定义：从字节片段出发反复合并常见相邻对，形成可复用的编码单元，再把文本变为这些单元的ID序列。&#10;作用：在控制词表数量时压缩序列，兼顾多语言与未见文本的表示，减少模型所需处理位置。&#10;本项目：先按SPLIT_PATTERN切分，数字采用1至2位；总词表先减9个特殊token容量再训练普通排名，默认总量32768。&#10;注意：普通文本走encode_ordinary，不把用户中的协议字符串自动当特殊ID；tokenizer字符预算不等于模型训练token预算。&#10;位置：nanochat/tokenizer.py:26 SPLIT_PATTERN；nanochat/tokenizer.py:42 train_from_iterator">字节级 BPE</abbr>（[释义](glossary/02-data-and-protocol.md#term-bpe)）先按 SPLIT_PATTERN 预切分、再学合并排名。数字按 1–2 位预切分，区别于代码注释对照的 GPT-4 1–3 位。默认 max_chars=2,000,000,000，doc_cap=10000 字符，<a id="ref-vocab-001"></a><abbr title="Vocabulary / Vocabulary Size｜词表与词表大小&#10;定义：所有可编码ID的集合及数量，定义输出分类空间与输入查表范围。&#10;作用：决定输入输出层尺寸，也影响token压缩率和[B,T,V]分数张量的显存。&#10;本项目：默认总32768包括9特殊ID；GPT内部把词表向上补到64倍数，forward裁掉超出真实V的输出列。&#10;注意：词表维度补齐不同于序列padding；默认32768已整除64，没有额外列，补齐列不代表新增可生成token。&#10;位置：scripts/tok_train.py:19 vocab_size；nanochat/gpt.py:170 padded_vocab_size；nanochat/gpt.py:513 裁列">vocab_size</abbr>（[释义](glossary/02-data-and-protocol.md#term-vocab)）=32768（包括 9 个特殊 ID）；达到字符阈值后可能略超预算。这不是模型训练 token 数。
@@ -53,6 +54,7 @@ source_symbols:
 
 所有阶段必须保留原 ID 映射。load_model 只检查词表大小相等，同样 32768 的另一个词表也可能错配，不可重训后随意替换。
 
+<a id="reading-3-2"></a>
 ## 3.2 角色、工具与监督位置
 
 <a id="ref-protocol-001"></a><abbr title="Conversation Protocol｜对话协议&#10;定义：把messages的角色、正文和工具分段序列化为带边界的token序列，使训练与生成遵循统一结构。&#10;作用：标明谁在发言、何时调用工具、何时结束回答，避免阶段之间格式错位。&#10;本项目：9个特殊ID；render_conversation要求user/assistant交替，首system并进下一user；assistant支持text/python/python_output。&#10;注意：没有独立system ID或通用Jinja chat_template；render_for_completion删最后示范答案并追加assistant_start，不能把标准答案留进提示。&#10;位置：nanochat/tokenizer.py:140 render_conversation；nanochat/tokenizer.py:241 render_for_completion">对话协议</abbr>（[释义](glossary/02-data-and-protocol.md#term-protocol)）包含 9 个特殊 token，没有独立 system/PAD token：

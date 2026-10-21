@@ -45,6 +45,7 @@ source_symbols:
 
 <a id="sec-5"></a>
 
+<a id="reading-4-1"></a>
 ## 4.1 配置不是可学习权重
 
 <a id="ref-config-001"></a><abbr title="Configuration / Hyperparameter｜配置与超参数&#10;定义：由命令行或代码设定、控制结构与训练行为的数值，如层数、长度、学习率和评估周期。&#10;作用：定义实验，并在结构meta或用户配置中记录以便重建和理解训练。&#10;本项目：base入口默认depth20/aspect64/head_dim128，覆盖GPTConfig自身12层/768宽/6头；SFT可继承base配置。&#10;注意：CLI的“参数”不是可学习权重，matrix-lr不会被反向学习；SFT user_config在继承前复制可能仍None，结构看model_config。&#10;位置：scripts/base_train.py:41 argparse；nanochat/gpt.py:29 GPTConfig；scripts/chat_sft.py:68 user_config">配置与超参数</abbr>（[释义](glossary/04-model-and-forward-pass.md#term-config)）决定结构/训练行为；<a id="ref-weights-001"></a><abbr title="Parameters / Weights / state_dict｜可学习参数、权重与状态字典&#10;定义：可学习参数是由优化器按梯度更新的张量，state_dict按名字收集参数和持久缓冲。&#10;作用：保存模型学到的数值，与仅说明层数/维度的配置文件分工。&#10;本项目：包含wte、独立lm_head、投影、值表与层标量；cos/sin persistent=False，加载时重建，不在权重文件中。&#10;注意：state_dict不含完整训练游标、随机状态和数据缓冲；严格加载要求名字/形状匹配，不能与CLI超参数混为同义。&#10;位置：nanochat/gpt.py:156 GPT；nanochat/gpt.py:200 register_buffer；nanochat/checkpoint_manager.py:76 build_model">可学习参数</abbr>（[释义](glossary/04-model-and-forward-pass.md#term-weights)）是反向后更新的张量。base_train 覆盖 GPTConfig 自身默认：
@@ -61,6 +62,7 @@ source_symbols:
 
 模型支持<a id="ref-gqa-001"></a><abbr title="GQA / Grouped-Query Attention；MHA｜分组查询与多头注意力&#10;定义：GQA让多个查询头共享较少K/V头，MHA则查询头与K/V头数量相等。&#10;作用：共享K/V可降低缓存与投影开销，但收益只有配置真正使用共享头时才存在。&#10;本项目：GPT支持Hkv≤Hq且整除，SDPA根据头数不同启用enable_gqa；base入口设置Hkv=Hq，默认10/10。&#10;注意：支持不等于默认启用，没有n-kv-head预训练CLI；不能声称默认缓存因GQA缩小或给不存在参数命令。&#10;位置：nanochat/gpt.py:76 头数检查；scripts/base_train.py:138 GPTConfig；nanochat/flash_attention.py:134 enable_gqa">GQA</abbr>（[释义](glossary/04-model-and-forward-pass.md#term-gqa)），但入口默认 Hq=Hkv，实际 MHA；没有 --n-kv-head CLI。宽度向 head_dim 倍数对齐，任意自选 head_dim 不保证满足 RoPE/内核隐含约束，默认 128 是已知配置。
 
+<a id="reading-4-2"></a>
 ## 4.2 从结构到权重
 
 先区分三个动作：配置确定张量形状；初始化为新模型填入起始数值；加载用已有参数替换这些数值。第一次阅读掌握这个顺序即可；下面的逐模块分布用于源码对照。
@@ -83,6 +85,7 @@ source_symbols:
 
 固定种子不是完整确定性保证；未启用 torch.use_deterministic_algorithms。输入与输出词表权重独立，不绑定。
 
+<a id="reading-4-3"></a>
 ## 4.3 从配置重建模型并加载参数
 
 <a id="ref-warmstart-001"></a><abbr title="Warm Start / Weight Loading｜热启动与权重加载&#10;定义：用已有权重作为新阶段起点，可导入优化器统计，但数据与循环通常重新开始。&#10;作用：让SFT继承基础能力、RL继承对话/工具能力，减少从零学习成本。&#10;本项目：load_model映射base/sft/rl，默认最深tag/最新step；SFT默认读base完整optimizer后只重置lr，RL只读sft模型。&#10;注意：不是断点恢复；state_dict还覆盖beta/decay，日志“仅momentum”不准确。最好显式tag/step避免自动挑错权重。&#10;位置：nanochat/checkpoint_manager.py:148 load_model_from_dir；scripts/chat_sft.py:134 热启动；scripts/chat_rl.py:74 加载">加载已有权重</abbr>（[释义](glossary/06-checkpoints-and-resume.md#term-warmstart)）为 load_model→load_model_from_dir→build_model→load_checkpoint。以 meta.model_config 重建 GPT，先初始化重建 RoPE，再 strict=True、assign=True 加载权重。CPU/MPS 把保存的 bf16 张量转 float32；旧模型兼容补丁仅明确覆盖缺失 window_pattern、resid_lambdas、x0_lambdas，不能承诺所有历史版本兼容。

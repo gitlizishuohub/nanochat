@@ -46,6 +46,7 @@ source_symbols:
 <a id="sec-11"></a>
 先读[推理与生成](12-inference-and-generation.md)，再区分固定目标评分、候选分类与自由生成判题。
 
+<a id="reading-13-1"></a>
 ## 13.1 四种评价出口
 
 | 评价 | 源码过程 | 解释边界 |
@@ -66,6 +67,7 @@ CORE多选按候选续写平均NLL最小选择；语言续写逐位置argmax全�
 
 <a id="ref-benchmarks-002"></a><abbr title="GSM8K / MMLU / ARC / HumanEval｜数学、知识、科学与代码任务&#10;定义：不同数据与评分接口，各检验一种能力，不是训练算法名称。&#10;作用：可用于示范、结果奖励或独立任务评分，但用途随入口而不同。&#10;本项目：SFT用MMLU/GSM8K，RL只GSM8K，ChatCORE再加ARC/HumanEval；数学抽####数字字符串、代码执行测试。&#10;注意：SFT验证取部分test，需记录污染/使用范围；HumanEval执行器不是对抗性安全隔离，本次未运行；实际条数未下载确认。&#10;位置：tasks/gsm8k.py:86 evaluate；tasks/mmlu.py:28 get_example；tasks/arc.py:23 get_example；tasks/humaneval.py:79 evaluate">HumanEval</abbr>（[释义](glossary/07-evaluation-and-metrics.md#term-benchmarks)）拼接生成代码与测试，由execute_code在新subprocess/临时目录限时限内存、禁部分函数，源码明确不是对抗性安全隔离。本次未运行代码评测。eval不自动关闭求导，评估函数显式no_grad，Engine用inference_mode。
 
+<a id="reading-13-2"></a>
 ## 13.2 能力与系统性能的边界
 
 本章讨论分词压缩、预测损失和任务能力。推理延迟、吞吐、显存属于系统性能，实验方法见[每日路线 D12](../career_roadmap/w2/d12_benchmark_schema.md)和[D13](../career_roadmap/w2/d13_repeated_benchmark.md)；不能用回答质量推导加速比。

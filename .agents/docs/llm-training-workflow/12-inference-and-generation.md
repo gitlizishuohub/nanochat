@@ -46,10 +46,12 @@ source_symbols:
 <a id="sec-inference"></a>
 先读模型前向与分词协议；本章解释如何把预测分数变成回答，是后续生成评估和 RL 的前置知识。
 
+<a id="reading-12-1"></a>
 ## 12.1 无缓存生成与缓存生成
 
 `GPT.generate` 每步重新输入完整前缀；`Engine.generate` 先处理提示，再缓存历史 <abbr title="Key / Value · 注意力中的键和值；保存历史位置的计算结果，供后续生成步骤复用。">K/V</abbr>，后续只输入新增 token。两条路径都调用同一个模型前向；是否训练、是否有缓存是不同维度。
 
+<a id="reading-12-2"></a>
 ## 12.2 生成控制流与返回格式
 
 <a id="ref-generate-001"></a><abbr title="Generation / Prefill / Decode｜生成、提示预填充与逐词解码&#10;定义：生成重复预测下一ID，prefill一次处理完整提示，decode随后每次只处理新token并读历史缓存。&#10;作用：把训练概率模型用于实际回答，减少每步重复计算旧前缀的成本。&#10;本项目：Engine先B1预填充再复制缓存到多样本行，后续[B,1]解码；generate_batch返回含提示序列与mask，去终止ID。&#10;注意：生成不backward；评分前切prefix_length。流式CLI可能显示终止标记并补assistant_end，不能与批量契约混用。&#10;位置：nanochat/engine.py:176 Engine.generate；nanochat/engine.py:277 generate_batch；scripts/chat_cli.py:86 生成">生成</abbr>（[释义](glossary/09-inference-and-sampling.md#term-generate)）从渲染好的提示ID开始：B=1的<a id="ref-generate-002"></a><abbr title="Generation / Prefill / Decode｜生成、提示预填充与逐词解码&#10;定义：生成重复预测下一ID，prefill一次处理完整提示，decode随后每次只处理新token并读历史缓存。&#10;作用：把训练概率模型用于实际回答，减少每步重复计算旧前缀的成本。&#10;本项目：Engine先B1预填充再复制缓存到多样本行，后续[B,1]解码；generate_batch返回含提示序列与mask，去终止ID。&#10;注意：生成不backward；评分前切prefix_length。流式CLI可能显示终止标记并补assistant_end，不能与批量契约混用。&#10;位置：nanochat/engine.py:176 Engine.generate；nanochat/engine.py:277 generate_batch；scripts/chat_cli.py:86 生成">prefill</abbr>（[释义](glossary/09-inference-and-sampling.md#term-generate)）完整前向，复制提示缓存至多样本行，<a id="ref-generate-003"></a><abbr title="Generation / Prefill / Decode｜生成、提示预填充与逐词解码&#10;定义：生成重复预测下一ID，prefill一次处理完整提示，decode随后每次只处理新token并读历史缓存。&#10;作用：把训练概率模型用于实际回答，减少每步重复计算旧前缀的成本。&#10;本项目：Engine先B1预填充再复制缓存到多样本行，后续[B,1]解码；generate_batch返回含提示序列与mask，去终止ID。&#10;注意：生成不backward；评分前切prefix_length。流式CLI可能显示终止标记并补assistant_end，不能与批量契约混用。&#10;位置：nanochat/engine.py:176 Engine.generate；nanochat/engine.py:277 generate_batch；scripts/chat_cli.py:86 生成">decode</abbr>（[释义](glossary/09-inference-and-sampling.md#term-generate)）每步输入[B,1]，从末位置[B,V]分数按<a id="ref-sampling-001"></a><abbr title="Temperature / Top-k / Greedy｜温度、截断采样与贪心&#10;定义：温度改变分数差异，top-k限制最高分候选，greedy直接取最高分ID。&#10;作用：调节生成随机性与候选范围，是推理配置而非学习率或可学习权重。&#10;本项目：sample_next_token在温度0先argmax；正温度top_k&gt;0取k分数除温度softmax采样，CLI0.6/50，RL1/50。&#10;注意：温度0时top-k分支不运行，增加温度不保证质量；评估需固定设置，采样分布可能不同于RL训练全词表logp。&#10;位置：nanochat/engine.py:141 sample_next_token；scripts/chat_cli.py:19 配置；scripts/chat_rl.py:47 生成配置">温度/top-k</abbr>（[释义](glossary/09-inference-and-sampling.md#term-sampling)）选下个ID。temperature=0直接argmax；CLI默认0.6/top-k50、每答最大256。

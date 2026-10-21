@@ -20,6 +20,16 @@ knowledge_scope: W2第4天实操与验收
 
 前一天：[返回前一天](d10_training_smoke.md)；后一天：[继续下一天](d12_benchmark_schema.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
+## 当天的流程阅读
+
+先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+
+- **阅读入口：**[4.3 从配置重建模型并加载参数](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-3)；[10.2 文件职责与保存时点](../../llm-training-workflow/10-logging-checkpoints-and-resume.md#reading-10-2)；[10.3 真实恢复与跨阶段加载](../../llm-training-workflow/10-logging-checkpoints-and-resume.md#reading-10-3)。
+- **今天重点：**对照本次保存与重新加载的真实文件，分清模型配置、参数、优化器状态和恢复状态。注意推理加载与继续训练的要求不同。
+- **暂时跳过：**不实际运行恢复示例；不能因为能加载模型，就认为已验证精确恢复。
+
+**读完能解释：**你今天重新加载需要哪些文件？如果要恢复原训练，还缺哪些状态和一致性条件？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+
 ## 开始前：固定 shell 与结果位置
 
 所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。

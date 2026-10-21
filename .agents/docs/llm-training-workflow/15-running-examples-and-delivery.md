@@ -46,6 +46,7 @@ source_symbols:
 <a id="sec-running"></a>
 本章在理解训练、SFT、推理和评价后使用。下面命令保留原文的静态参考性质，并非已运行的实验结果。
 
+<a id="reading-15-1"></a>
 ## 15.1 运行前的条件
 
 本地学习沿用 `nanochat` <abbr title="Conda · 管理独立 Python 解释器与依赖的工具；此处使用名为 nanochat 的既有环境。">Conda</abbr> 环境，激活和复查见[环境记录](../project-maintenance/nanochat-conda-environment-2026-10-15.md)。先确认数据、原分词器、模型来源和输出目录；逐日小实验优先按[每日指导](../career_roadmap/w1/d01_starting_point.md)执行。
@@ -94,6 +95,7 @@ python -m scripts.chat_cli -i sft -g d24
 
 脚本当前d24/ratio8/batch16/FP8，与入口d20/ratio12/batch32及旧d20注释不同。整个bash脚本会安装、下载、训练，本次未执行。显存不足可减device-batch-size，同时保持总量整除，不能宣称当前显卡可承载。
 
+<a id="reading-15-3"></a>
 ## 15.3 交付资产与部署边界
 
 交付选定model.pt、同一步meta.json、原tokenizer.pkl/token_bytes.pt、仓库版本、启动配置与实际评估范围/结果；恢复base另需匹配rank优化器分片，RL没有该产物。能力与性能结果必须真实执行后填写。
