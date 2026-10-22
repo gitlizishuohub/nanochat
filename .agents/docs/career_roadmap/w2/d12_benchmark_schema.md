@@ -32,20 +32,21 @@ knowledge_scope: W2第5天实操与验收
 
 ## 开始前：固定 shell 与结果位置
 
-所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
-python -c "import sys; print(sys.executable); print(sys.version)"
 mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d12_session.log) 2>&1
+{
+python -c "import sys; print(sys.executable); print(sys.version)"
+} > >(tee -a experiments/inference_infra/reports/d12_session.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d12_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
+本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d12_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -111,7 +112,9 @@ GPU峰值在模型已加载之后重置，allocated仍包含活跃模型内存�
 不要手填一组漂亮数字作为 schema 样例。用一个不存在的标签生成真实错误样例：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --model-tag absent-w2-schema-check --step 123456 --output experiments/inference_infra/results/raw/d12_schema_error.jsonl
+} > >(tee -a experiments/inference_infra/reports/d12_session.log) 2>&1
 ```
 
 预期非零退出，JSONL有 `status=error` 和真实异常原因。这只验证错误落盘；模型缺失或依赖缺失都可能触发，不是一次成功测量。参数非法（例如 `--warmup 0`）由 argparse 退出2，尚未进入实验，因此不会写raw行。
@@ -135,7 +138,7 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --mo
 |---|---|---|---|
 | `experiments/inference_infra/d12_protocol.md` | 固定工作负载、计时与统计边界 | 第二步 | 可选人工整理；可复用本聊天确认的协议与自动记录，文件若生成仍保留 d12 |
 | `experiments/inference_infra/results/raw/d12_schema_error.jsonl` | 真实错误样例 | d12_benchmark.py | 条件自动；通过参数校验进入实验后写错误行；argparse 错误不写 |
-| `experiments/inference_infra/reports/d12_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
+| `experiments/inference_infra/reports/d12_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
 
 原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 

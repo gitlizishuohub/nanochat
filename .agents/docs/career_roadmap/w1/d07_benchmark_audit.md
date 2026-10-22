@@ -48,23 +48,24 @@ knowledge_scope: W1 D7 基准边界审计与周验收
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log` | 可选补测 stdout | 复用 `d03_run_inference_tests.py` | 仅运行补测时自动生成 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 可选补测 stderr | 同上 | 仅运行补测时自动生成，可为空 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 可选补测元数据 | 同上 | 仅补测子进程正常返回后自动生成 |
-| `experiments/inference_infra/reports/d07_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
+| `experiments/inference_infra/reports/d07_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d07_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d07_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 从 main 的前置条件开始
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
-exec > >(tee -a experiments/inference_infra/reports/d07_checks.log) 2>&1
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
+{
 rg -n 'def bench_generate|def build_prompt|def main|assert|warmup|decode_steps|step_times|json.dumps' scripts/infer_bench.py
 sed -n '120,205p' scripts/infer_bench.py
 rg -n '^def load_model|checkpoint|tokenizer' nanochat/checkpoint_manager.py
+} > >(tee -a experiments/inference_infra/reports/d07_checks.log) 2>&1
 ```
 
 原入口依赖：可用 CUDA、单进程、合法 nanochat checkpoint、匹配 tokenizer，以及对应模型配置。<abbr title="checkpoint · 保存的模型状态与配套元数据。nanochat 加载模型需要匹配架构配置与 tokenizer，不能直接把 MiniMind 权重文件替换进去。">checkpoint</abbr> 不是只有 `.pt` 文件就算具备条件；W2 会逐项核对。
@@ -74,8 +75,10 @@ rg -n '^def load_model|checkpoint|tokenizer' nanochat/checkpoint_manager.py
 ## 2. 手动划出 TTFT 的开始和结束
 
 ```bash
+{
 sed -n '45,90p' scripts/infer_bench.py
 sed -n '205,315p' nanochat/engine.py
+} > >(tee -a experiments/inference_infra/reports/d07_checks.log) 2>&1
 ```
 
 <abbr title="TTFT / Time To First Token · 从约定开始点到第一生成 token 可用的时间。本入口输入已是 token ID，因此不包含文本分词；但包含生成器首次执行中的缓存分配、prefill、复制与采样。">TTFT</abbr> 起点在 `t_start=time.perf_counter()`，终点在第一次 `next(generator)` 后 CUDA synchronize 完成。按这个边界列清单：
@@ -113,7 +116,9 @@ sed -n '205,315p' nanochat/engine.py
 ## 4. 列出重复测量和输入校验的缺口
 
 ```bash
+{
 sed -n '215,310p' scripts/infer_bench.py
+} > >(tee -a experiments/inference_infra/reports/d07_checks.log) 2>&1
 ```
 
 对照下面差异表核验总计划硬门槛，可直接说明缺口：

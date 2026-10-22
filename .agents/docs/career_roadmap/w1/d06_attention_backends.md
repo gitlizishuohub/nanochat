@@ -44,22 +44,23 @@ knowledge_scope: W1 D6 注意力后端条件与CPU覆盖边界
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 本次筛选测试诊断 | 同上 | 自动，可为空 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 本次筛选表达式、退出码与用时 | 同上 | 条件生成：子进程正常返回后写入 |
 | `experiments/inference_infra/reports/d06_attention_backends.md` | 后端条件表、掩码和覆盖边界 | 第 5 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d06_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
+| `experiments/inference_infra/reports/d06_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d06_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d06_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 按源码分开“可加载”与“最终使用”
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
-exec > >(tee -a experiments/inference_infra/reports/d06_checks.log) 2>&1
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
+{
 sed -n '1,100p' nanochat/flash_attention.py
 sed -n '10,36p' nanochat/common.py
+} > >(tee -a experiments/inference_infra/reports/d06_checks.log) 2>&1
 ```
 
 <abbr title="FA3 / Flash Attention 3 · 本项目通过 kernels 包加载的 GPU 注意力实现。能否加载由硬件、内核获取和运行依赖共同决定；模块里定义了接口并不说明本次正在使用它。">FA3</abbr> 的探测在模块导入时执行。无 CUDA 则返回 None；有 CUDA 时依据设备能力尝试不同 kernel 包，异常返回 None。不要把源码中的硬件注释当作你手里那张卡已验证的支持表。
@@ -82,7 +83,9 @@ override 是测试机制；不建议在日常实验中随意修改模块私有�
 ## 2. 从外部布局读到 SDPA 内部布局
 
 ```bash
+{
 sed -n '98,230p' nanochat/flash_attention.py
+} > >(tee -a experiments/inference_infra/reports/d06_checks.log) 2>&1
 ```
 
 外部统一接口用 `[B,T,H,D]`，回退先 transpose 到 `[B,H,T,D]`，调用 PyTorch，再转回来。<abbr title="SDPA / Scaled Dot Product Attention · PyTorch 的缩放点积注意力接口。nanochat 用它实现回退，并显式处理滑动窗口和缓存的因果对齐。">SDPA</abbr> 的内部布局与 K/V 缓存存储布局不同；不要为了“统一图”把它们混写。
@@ -106,13 +109,17 @@ sed -n '98,230p' nanochat/flash_attention.py
 使用[测试捕获脚本](scripts/d03_run_inference_tests.py)：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --select 'SDPAOnly or OverrideMechanism'
+} > >(tee -a experiments/inference_infra/reports/d06_checks.log) 2>&1
 ```
 
 保留新时间戳目录，不能覆盖 D3。阅读测试时核对每个断言：
 
 ```bash
+{
 rg -n 'class TestSDPAOnly|class TestOverrideMechanism|def test_|skipif' tests/test_attention_fallback.py
+} > >(tee -a experiments/inference_infra/reports/d06_checks.log) 2>&1
 ```
 
 基础前向检查 shape 与 NaN；反向检查梯度存在且有限；KV 用例检查 prefill 和单 token decode 的位置。没有任何一条 CPU 通过能证明 FA3 输出与 SDPA 一致，带 FA3 条件的对照用例仍需 GPU。

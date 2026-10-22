@@ -32,20 +32,21 @@ knowledge_scope: W2第7天实操与验收
 
 ## 开始前：固定 shell 与结果位置
 
-所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
-python -c "import sys; print(sys.executable); print(sys.version)"
 mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d14_session.log) 2>&1
+{
+python -c "import sys; print(sys.executable); print(sys.version)"
+} > >(tee -a experiments/inference_infra/reports/d14_session.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d14_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
+本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d14_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -60,8 +61,10 @@ exec > >(tee -a experiments/inference_infra/reports/d14_session.log) 2>&1
 两条命令都调用 [重复基准脚本](scripts/d12_benchmark.py)，仅改变B并使用不同raw路径：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --random-model --prompt-tokens 8 --decode-tokens 4 --batch-size 1 --warmup 3 --repeats 5 --output experiments/inference_infra/results/raw/d14_p8_g4_b1_gate_cpu.jsonl
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --random-model --prompt-tokens 8 --decode-tokens 4 --batch-size 4 --warmup 3 --repeats 5 --output experiments/inference_infra/results/raw/d14_p8_g4_b4_gate_cpu.jsonl
+} > >(tee -a experiments/inference_infra/reports/d14_session.log) 2>&1
 ```
 
 B4每个有效run应 `generated_tokens=16`、`per_row_generated_tokens=[4,4,4,4]`。TPOT仍是三个输出列间隔的均值；它不应再除4。B4与B1的TTFT不同可能来自cache复制和分配，但随机CPU结果只用于检查代码，不做GPU“加速倍数”结论。
@@ -73,7 +76,9 @@ B4每个有效run应 `generated_tokens=16`、`per_row_generated_tokens=[4,4,4,4]
 打开 [W3统计脚本](../w3/scripts/d13_aggregate.py) 与 [统计复核指导](../w3/d19_statistics_audit.md)。先运行help确认参数，再用同一个统计入口处理这些raw。不要手抄五个TTFT到Excel后丢掉run_id。实际汇总使用以下命令：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --raw-dir experiments/inference_infra/results/raw --output experiments/inference_infra/results/summary/d14_w2_gate.csv --audit experiments/inference_infra/results/summary/d14_w2_gate_audit.jsonl
+} > >(tee -a experiments/inference_infra/reports/d14_session.log) 2>&1
 ```
 
 该命令读取共享目录下全部匹配文件，也可能包含第 13 日的 session；输出文件名 d14 表示汇总文件首次生成日，不表示输入仅限第 14 日。按 `experiments/inference_infra/results/summary/d14_w2_gate_audit.jsonl` 的完整输入路径与 run_id 选出本日小矩阵的组，再检查以下关系；其它 session 保留为独立组，不计入本日验收：
@@ -122,7 +127,7 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --raw-dir experim
 | `experiments/inference_infra/results/summary/d14_w2_gate.csv` | 小矩阵统计 | d13_aggregate.py | 条件自动；第三步汇总命令 |
 | `experiments/inference_infra/results/summary/d14_w2_gate_audit.jsonl` | 小矩阵审计 | d13_aggregate.py | 条件自动；第三步汇总命令 |
 | `experiments/inference_infra/reports/d14_w2_gate.md` | 周结、分层验收和交接 | 第四步 | 可选人工整理；可直接在聊天中回答本日问题 |
-| `experiments/inference_infra/reports/d14_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
+| `experiments/inference_infra/reports/d14_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
 
 原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 

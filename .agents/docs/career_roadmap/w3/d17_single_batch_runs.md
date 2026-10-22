@@ -28,15 +28,17 @@ knowledge_scope: W3第3日实操与验收
 
 ## 开始前：固定终端和记录方式
 
-本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。
+本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+{
 python -c "import sys; print(sys.executable)"
 git status --short
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
+} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
@@ -52,8 +54,10 @@ exec > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ## 第一步：核对设备和依赖
 
 ```bash
+{
 python -c "import torch; print(torch.__version__); print('cuda_available=',torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU only')"
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --help
+} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
 若 import 失败，记录解释器和错误，先完成环境修复，不把“无 torch”误写成“CPU 测试通过”。有 GPU 但返回 false 时检查所装 PyTorch 版本与驱动；今天不自动租卡或联网安装。
@@ -63,10 +67,12 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --help
 在同一终端恢复昨天的真实 META、MODEL_TAG、CHECKPOINT_STEP 和 NANOCHAT_BASE_DIR。以下命令使用[矩阵驱动](scripts/d16_matrix.py)，从项目根运行：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
   --artifact-day 17 --meta "$META" --source base --model-tag "$MODEL_TAG" --step "$CHECKPOINT_STEP" \
   --batch 1 --device cuda --execute \
   --output-dir experiments/inference_infra/results/raw/w3_b1_attempt01
+} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
 `--execute` 是实际运行开关；去掉它仅列计划。程序逐 case 等待并保存完整 log；`PROCESS_OK` 仅说明子进程退出码为 0，不等于全部正式行都有效。其余 B=4 case 仍列 PENDING。顺序固定有利于首次核查，正式分析仍需考虑温度、时钟和背景负载；不要把一次跑出来的最小值当成绩。
@@ -78,11 +84,13 @@ python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
 先保留昨天 GPU 计划不动，再用[W2 基准脚本](../w2/scripts/d12_benchmark.py) 的随机小模型做短输入验证。<abbr title="Smoke test · 冒烟验证；用很小工作量检查接口、文件格式与执行路径，不证明模型质量或GPU性能。">smoke</abbr> 只检查程序是否形成闭环。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
   --device cpu --random-model --prompt-tokens 32 --decode-tokens 8 --batch-size 1 \
   --warmup 3 --repeats 5 --seed 42 \
   --output experiments/inference_infra/results/raw/d17_p32_g8_b1_cpu_contract.jsonl
 python -m pytest tests/test_engine.py tests/test_attention_fallback.py -q
+} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
 随机权重/测试 tokenizer 是接口夹具，不能代替实际 checkpoint 的性能报告。CPU SDPA 测试通过也不证明 FA3 通过，GPU 测试被跳过必须单列 skip 数。CPU 机器资源有限时先只跑 Engine 测试，完整 fallback 单测后续补记。
@@ -94,7 +102,9 @@ python -m pytest tests/test_engine.py tests/test_attention_fallback.py -q
 用下面只读命令，替换为你刚生成的 case 文件；不要拿 matrix.jsonl 当 benchmark raw。
 
 ```bash
+{
 python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/results/raw/d17_p32_g8_b1_cpu_contract.jsonl'); r=[json.loads(x) for x in p.read_text().splitlines()]; print(json.dumps(r[-1],indent=2,ensure_ascii=False))"
+} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
 检查 `phase` 区分 warmup/measure；正式至少 5 行，`status=ok` 才候选有效。`actual_decode_steps` 是 yield 列数，`generated_tokens` 是排除终止、forced 和完成行 padding 后的有效 token 总数，两者不可互换；B=1 也可能因工具规则而不同。检查 TTFT、decode_step_ms、elapsed_ms 都为正且单位 ms，`env`、model_config、后端、精度都有记录。
@@ -119,7 +129,7 @@ python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/resu
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d17_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d17_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
 | `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
 | `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g32_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |

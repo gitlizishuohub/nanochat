@@ -28,15 +28,17 @@ knowledge_scope: W3第7日实操与验收
 
 ## 开始前：固定终端和记录方式
 
-本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。
+本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+{
 python -c "import sys; print(sys.executable)"
 git status --short
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
+} > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
@@ -54,10 +56,12 @@ W3 收尾不以优化数字为目标，而是能展示一条从训练产物到�
 若希望留讲稿文件，可选使用[材料准备脚本](scripts/d15_prepare_materials.py)，附上实际复现入口或自动统计；口述练习可跳过此材料脚本。无需今天发送任何邮件或联系他人。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
   --kind briefing --output-dir experiments/inference_infra/reports/w3_briefing_v1 \
   --evidence experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md \
   --evidence experiments/inference_infra/results/summary/d19_baseline.csv
+} > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
 ```
 
 可直接按下列时间段练习口述并与我交流，不要求写讲稿；需要文件时才运行材料脚本并填写 `d21_project_briefing.md`。若未生成复现正文，先回第 20 日补齐实际复现入口，不能用口头声称代替。没有 d19_baseline.csv 时在清单保留缺失并在介绍时说“尚无实测基线”，不要把缺失读成零延迟。<abbr title="Baseline · 基线；后续优化前固定条件下的测量参照。没有原始样本和方法约定的单次数字不能充当可信基线。">baseline</abbr> 是后续变化的参照，不等于优于上游或完成优化。
@@ -131,7 +135,7 @@ nanochat最短入口：命令、模型来源、实际验证设备
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d21_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d21_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
 | `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/reports/w3_briefing_v1/d21_project_briefing.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 选择材料脚本后自动生成；口述提纲文件可选 |
 | `experiments/inference_infra/reports/w3_briefing_v1/d21_briefing_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 选择材料脚本后自动生成；文件存在不等于结论通过 |

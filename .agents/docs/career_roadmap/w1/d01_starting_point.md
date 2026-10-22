@@ -37,24 +37,25 @@ knowledge_scope: W1 D1 起点证据复核
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d01_starting_point_inventory.json` | 历史文件存在性、哈希与 CSV 摘要 | `d01_inventory_starting_point.py` | 自动：完成盘点即写入；无匹配证据时退出码 2 仍有 JSON |
 | `experiments/inference_infra/reports/d01_starting_point.md` | 起点结论、证据与缺口 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d01_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
+| `experiments/inference_infra/reports/d01_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d01_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d01_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 准备终端与正确解释器
 
-所有命令从 nanochat 根目录执行。每次新开终端先运行：
+所有命令从 nanochat 根目录执行。当前终端会自动激活 nanochat，无需重复激活；每次新开终端先检查：
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
-exec > >(tee -a experiments/inference_infra/reports/d01_checks.log) 2>&1
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
+{
 python -c 'import sys; print(sys.executable)'
 git status --short
+} > >(tee -a experiments/inference_infra/reports/d01_checks.log) 2>&1
 ```
 
 解释器应是 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。本轮编写教程时已创建这个 Conda 环境；创建环境不等于依赖安装完毕或模型测试通过，后两项在 D2、D3 留独立证据。Git 输出表示你开始前的已有改动，保留它们，不执行 `reset --hard`。
@@ -66,8 +67,10 @@ git status --short
 使用[起点证据盘点脚本](scripts/d01_inventory_starting_point.py)：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w1/scripts/d01_inventory_starting_point.py --help
 python .agents/docs/career_roadmap/w1/scripts/d01_inventory_starting_point.py
+} > >(tee -a experiments/inference_infra/reports/d01_checks.log) 2>&1
 ```
 
 脚本默认扫描相邻 MiniMind 的当前实验目录及 `experiments/archive/minimind_baseline*`，读取文件、计算 SHA256、统计 CSV 行数，不导入模型、不训练、不写 MiniMind。输出为 `experiments/inference_infra/results/w1/d01_starting_point_inventory.json`。
@@ -81,10 +84,12 @@ python .agents/docs/career_roadmap/w1/scripts/d01_inventory_starting_point.py
 先看摘要，再向下追证据：
 
 ```bash
+{
 sed -n '1,190p' ../minimind/experiments/archive/minimind_baseline-before-embedding-20261014/README.md
 cat ../minimind/experiments/archive/minimind_baseline-before-embedding-20261014/reports/reproduction.md
 head -n 5 ../minimind/experiments/archive/minimind_baseline-before-embedding-20261014/results/tables/d14_clean_kv_cache.csv
 head -n 5 ../minimind/experiments/archive/minimind_baseline-before-embedding-20261014/results/tables/generation_benchmark_raw.csv
+} > >(tee -a experiments/inference_infra/reports/d01_checks.log) 2>&1
 ```
 
 按下面顺序核对四处证据，可在交流中直接说明：
@@ -99,7 +104,9 @@ head -n 5 ../minimind/experiments/archive/minimind_baseline-before-embedding-202
 ## 4. 当天自验证与交流问题
 
 ```bash
+{
 mkdir -p experiments/inference_infra/reports
+} > >(tee -a experiments/inference_infra/reports/d01_checks.log) 2>&1
 ```
 
 完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d01_starting_point.md` 仅供需要时可选整理，不是必交文件。
@@ -120,7 +127,7 @@ mkdir -p experiments/inference_infra/reports
 | 有 README，无 CSV | 检查归档表目录；缺口只标对应行 | 文档声称与原始证据分层 |
 | CSV 行数不同 | 比较 D13/D14、矩阵参数与重复次数 | 分别列出两次实验范围 |
 | 数字与摘要不一致 | 优先记录具体表和字段，不凭记忆修数据 | 不一致项与复核动作 |
-| shell 没有 Conda 函数 | 先 source 指定 `conda.sh`，再 activate | 可先用完整解释器路径运行盘点 |
+| 自动激活后解释器仍不对 | 检查终端自动激活配置与解释器路径 | 可先用完整解释器路径运行盘点 |
 
 ## 6. 当天验收与记录
 

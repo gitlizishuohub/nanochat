@@ -39,24 +39,25 @@ knowledge_scope: W1 D2 Conda环境与硬件事实盘点
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d02_environment.json` | 本次环境原始事实 | `d02_inspect_environment.py` | 自动：正常完成采集后写入 |
 | `experiments/inference_infra/d02_env.md` | 环境卡及运行范围 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d02_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
+| `experiments/inference_infra/reports/d02_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d02_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d02_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 固定解释器，不另建虚拟环境
 
-本轮应用户要求已经创建 <abbr title="Conda environment · Conda 管理的独立 Python 环境。激活后终端中的 python 和已安装包应来自同一前缀；创建成功仅证明解释器存在，不证明全部项目依赖已安装。">Conda 环境</abbr> `nanochat`，Python 为 3.10.20。编写本指导时，CPU/dev 依赖安装已经完成，实测 PyTorch 为 `2.9.1+cpu`，CPU/FP32/SDPA 可运行，CUDA 不可用。完整安装与导入验证记录见[Conda 环境记录](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)。这只是编写时的本机事实，读者仍需重新采集自己的环境卡。以后各日均使用这一个环境：
+本轮应用户要求已经创建 <abbr title="Conda environment · Conda 管理的独立 Python 环境。激活后终端中的 python 和已安装包应来自同一前缀；创建成功仅证明解释器存在，不证明全部项目依赖已安装。">Conda 环境</abbr> `nanochat`，Python 为 3.10.20。编写本指导时，CPU/dev 依赖安装已经完成，实测 PyTorch 为 `2.9.1+cpu`，CPU/FP32/SDPA 可运行，CUDA 不可用。完整安装与导入验证记录见[Conda 环境记录](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)。这只是编写时的本机事实，读者仍需重新采集自己的环境卡。当前终端会自动激活 nanochat，以后各日直接检查这一个环境，无需重复激活：
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
-exec > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
+{
 python -c 'import sys; print(sys.executable); print(sys.version)'
 echo "$CONDA_PREFIX"
+} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
 ```
 
 两个路径应分别指向 `.../envs/nanochat/bin/python` 与 `.../envs/nanochat`。若 shell 仍指向其他环境，先停止模型运行并修正激活；不要用 `uv run` 产生第二个 `.venv`，也不要因为依赖正在下载而反复创建环境。
@@ -66,8 +67,10 @@ echo "$CONDA_PREFIX"
 打开[环境盘点脚本](scripts/d02_inspect_environment.py)，先看 `command()` 如何捕捉异常，再执行：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py --help
 python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py
+} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
 ```
 
 结果在 `experiments/inference_infra/results/w1/d02_environment.json`。脚本只读取 Git、包元数据、硬件命令，并在子进程导入 PyTorch；不下载、安装或训练。子进程导入失败会保留错误，而不是让整张环境卡消失。每次重跑覆盖同名文件，可用 `--output` 保存带日期快照。
@@ -90,9 +93,11 @@ python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py
 ## 3. 核对项目依赖和数据根目录
 
 ```bash
+{
 sed -n '1,145p' pyproject.toml
 rg -n 'NANOCHAT_BASE_DIR|def get_base_dir|COMPUTE_DTYPE|NANOCHAT_DTYPE' nanochat/common.py
 rg -n 'get_base_dir|parquet' nanochat/dataset.py
+} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
 ```
 
 当前 `pyproject.toml` 要求 Python ≥3.10，固定 `torch==2.9.1`，CPU 与 GPU extra 互斥；dev 组包含 pytest。<abbr title="extra · Python 项目可选依赖集合；cpu/gpu 用于选择对应的 torch 分发。dev group 则提供测试等开发工具。二者用途不同，不能把激活 Conda 视为已经安装这些依赖。">extra 与依赖组</abbr> 是安装选择，不是机器能力探测。
@@ -100,8 +105,10 @@ rg -n 'get_base_dir|parquet' nanochat/dataset.py
 本教程已有环境优先复用。依赖尚未安装完就写 `INSTALLING`，等安装结束后重跑盘点再更新版本。若将来需要复建，先核对本机 uv 对参数的支持：
 
 ```bash
+{
 uv pip install --help
 uv export --help
+} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
 ```
 
 已核对当前 uv 支持 `uv pip install --python` 与 `--group`。涉及 CPU/GPU 源和锁文件的复建，请按[环境记录中的实际安装步骤](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)逐条执行；不能仅凭 `pip install torch` 猜中 2.9.1 CPU 轮子，也不能把 CPU 与 GPU 两套依赖同时装进环境。今天没有必要重装一个已经可用的环境。
@@ -109,7 +116,9 @@ uv export --help
 `get_base_dir()` 默认使用 `~/.cache/nanochat`，可由 `NANOCHAT_BASE_DIR` 指定。只读盘点当前值：
 
 ```bash
+{
 python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_BASE_DIR", str(Path.home()/".cache/nanochat"))); print(p); print("exists:",p.exists())'
+} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
 ```
 
 不要今天就批量下载数据。交流时只需说明 tokenizer、parquet 语料、checkpoint 的候选根路径；是否完整由 W2 专门核查。大文件存储位置与自动结果、可选记录的位置分开，`/tmp` 用于缓存和临时验证，不适合保存唯一 checkpoint。
@@ -128,7 +137,7 @@ python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_
 
 ## 5. 失败分流与验收
 
-- Python 不对：重新 source 与 activate，再执行脚本，不继续拿其他项目环境的数据填卡。
+- Python 不对：先检查终端自动激活配置，确认解释器路径正确后再执行脚本，不继续拿其他项目环境的数据填卡。
 - 包元数据显示版本，导入却失败：读 `torch_runtime.stderr`，这是动态库或安装完整性问题，不能判为可运行。
 - torch 缺失：等依赖安装完成或记录 BLOCKED；标准库盘点仍算完成，模型验收仍未完成。
 - 无 CUDA：交流时说明 CPU 路线可继续，GPU 项 `PENDING_GPU`；明天执行 CPU 测试。

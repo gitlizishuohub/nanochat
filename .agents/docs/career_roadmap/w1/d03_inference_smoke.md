@@ -41,28 +41,31 @@ knowledge_scope: W1 D3 CPU推理测试及失败定位
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 诊断输出，可为空 | 同上 | 自动：启动 pytest 前打开 |
 | `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 命令、退出码、用时和 CPU 限制 | 同上 | 条件生成：子进程正常返回后写入；外部中断可能缺失 |
 | `experiments/inference_infra/reports/d03_inference_smoke.md` | 测试解释、skip 和未覆盖范围 | 第 5 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d03_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
+| `experiments/inference_infra/reports/d03_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d03_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d03_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 检查同一解释器内的依赖
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
-exec > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
+{
 python -c 'import sys,torch,pytest; print(sys.executable); print(torch.__version__); print(pytest.__version__)'
+} > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
 看到 `ModuleNotFoundError` 就先处理环境，不能把它解释成模型算法错误。本次任务由主流程安装 CPU 和 dev 依赖；安装未结束时不要同时启动第二次安装。准备好后用[测试捕获脚本](scripts/d03_run_inference_tests.py)：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --help
 python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py
+} > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
 脚本使用当前 `sys.executable -m pytest`，显式限制 CPU 和 FP32；每次建立独立时间戳目录，不覆盖上一轮日志。它关闭 pytest 本地缓存，把 Python 字节码缓存放 `/tmp/nanochat_w1_pycache`，避免无意义的仓库文件变动。
@@ -80,9 +83,11 @@ python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py
 ## 3. 逐个读懂现有用例证明什么
 
 ```bash
+{
 rg -n '^def test_|^class Test|def test_' tests/test_engine.py tests/test_attention_fallback.py
 sed -n '15,130p' tests/test_engine.py
 rg -n 'skipif|HAS_FA3|DEVICE|DTYPE|test_override_auto' tests/test_attention_fallback.py
+} > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
 按这条阅读顺序理解，可直接在聊天中说明：
@@ -109,7 +114,9 @@ rg -n 'skipif|HAS_FA3|DEVICE|DTYPE|test_override_auto' tests/test_attention_fall
 例如只重跑缓存容器与 SDPA：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --select 'kv_cache or SDPAOnly'
+} > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
 `--select` 是 pytest 的名字表达式。定向通过只说明筛选后的用例通过；最终仍需完整两文件运行。现有 `test_override_auto` 用 `USE_FA3 == HAS_FA3` 作为断言，而生产路由还看 compute dtype；未来在有 FA3 且强制 FP32 的机器运行时，应按源码核实这一测试假设，不能盲目认定是内核坏了。当前 CPU 隔离下这两个值都应为 false。

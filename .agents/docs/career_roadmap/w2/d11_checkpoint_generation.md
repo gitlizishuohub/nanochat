@@ -32,20 +32,21 @@ knowledge_scope: W2第4天实操与验收
 
 ## 开始前：固定 shell 与结果位置
 
-所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
-python -c "import sys; print(sys.executable); print(sys.version)"
 mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
+{
+python -c "import sys; print(sys.executable); print(sys.version)"
+} > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d11_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
+本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d11_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -56,8 +57,10 @@ exec > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
 这是一次从头训练；不要把它描述为“从 step2 恢复”。真实恢复需要 optimizer 与数据状态，当前教学脚本没有提供 resume 参数。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --steps 20 --model-tag d11_w2_20 --output-dir experiments/inference_infra/reports/d11_train_smoke_20
 python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --steps 20 --model-tag d11_w2_20 --output-dir experiments/inference_infra/reports/d11_train_smoke_20 --execute
+} > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
 ```
 
 先审查计划再执行。模型参数、上下文长度与昨天一致，只改变训练步数和标签。路径仍取决于当前 shell 的 `NANOCHAT_BASE_DIR`；开新终端必须重设或核对它。
@@ -67,7 +70,9 @@ python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --
 打开 [checkpoint 与双路径脚本](scripts/d10_checkpoint_probe.py)，执行：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device cpu --model-tag d11_w2_20 --step 20 --prompt 'The chemical formula of water is' --max-tokens 8 --output experiments/inference_infra/reports/d11_checkpoint_generation_20.json
+} > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
 ```
 
 先看 `model_config` 的 `sequence_len/vocab_size/n_layer/n_head/n_kv_head/n_embd/window_pattern`，再看 `prompt_ids/reference_ids/engine_ids/common_prefix_match`。<abbr title="Greedy decoding · 每步选择当前 logits 最大的 token。本文通过 temperature=0 使用确定的选择规则；相同 token 不证明逐步 logits 数值完全相等。">greedy</abbr> 消除采样随机性，但设备与算子数值差异仍可能使近似并列的 token 改变。
@@ -86,8 +91,10 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 模型身份由下面的自动日志与生成 JSON 提供，直接在聊天中回答文末问题即可。`experiments/inference_infra/reports/d11_checkpoint_manifest.md` 可选整理；不需要另填模板。读取 metadata 可用标准库，命令里的路径需与真实标签一致：
 
 ```bash
+{
 python -m json.tool "$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/meta_000020.json" > experiments/inference_infra/reports/d11_checkpoint_identity.log 2>&1
 sha256sum "$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/model_000020.pt" "$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl" >> experiments/inference_infra/reports/d11_checkpoint_identity.log 2>&1
+} > >(tee -a experiments/inference_infra/reports/d11_session.log) 2>&1
 ```
 
 交流时核对来源是 synthetic-smoke 还是 real-corpus，并把标签/step、路径/hash、配置、训练退出码与双路径结果对应起来。模型质量、GPU性能、逐步logits误差和所有cache状态正确性仍需分别验证。
@@ -120,7 +127,7 @@ sha256sum "$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/model_000020.pt" "$NANO
 | `experiments/inference_infra/reports/d11_checkpoint_generation_20.json` | step 20 双路径结果 | d10_checkpoint_probe.py | 条件自动；执行 probe 后写出 |
 | `experiments/inference_infra/reports/d11_checkpoint_identity.log` | metadata 展开与 SHA256 输出 | 第三步重定向命令 | 条件自动；运行命令时保存，读取失败也留日志 |
 | `experiments/inference_infra/reports/d11_checkpoint_manifest.md` | 冻结模型与 tokenizer 身份 | 第三步 | 可选人工整理；可直接在聊天中回答本日问题 |
-| `experiments/inference_infra/reports/d11_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
+| `experiments/inference_infra/reports/d11_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
 
 权重位于仓库外；以下是当前 `NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy` 时的完整绝对路径。使用自定义数据根时在交流中逐项提供真实绝对路径。仅真实训练保存阶段执行后生成；训练中断时不可宣称齐全：
 

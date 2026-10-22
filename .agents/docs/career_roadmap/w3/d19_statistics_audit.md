@@ -28,15 +28,17 @@ knowledge_scope: W3第5日实操与验收
 
 ## 开始前：固定终端和记录方式
 
-本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。
+本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+{
 python -c "import sys; print(sys.executable)"
 git status --short
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
+} > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
@@ -54,10 +56,12 @@ exec > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
 使用[统计审计脚本](scripts/d13_aggregate.py)。它读取所给目录下 `dNN_p*_g*_b*.jsonl`（兼容迁移前 `p*_g*_b*.jsonl`），不递归，也不把计划矩阵当原始测量。CPU 契约示例使用上级 raw 目录；GPU B1/B4 各自 attempt 目录应分别运行，防止未经检查混并。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
   --raw-dir experiments/inference_infra/results/raw \
   --output experiments/inference_infra/results/summary/d19_baseline.csv \
   --audit experiments/inference_infra/results/summary/d19_baseline_audit.jsonl
+} > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
 ```
 
 若你实际数据在 `w3_b1_attempt01`，修改 raw-dir，同时用独立输出名 `experiments/inference_infra/results/summary/d19_baseline_b1.csv`（审计另用 `experiments/inference_infra/results/summary/d19_baseline_b1_audit.jsonl`；B4分别使用 `experiments/inference_infra/results/summary/d19_baseline_b4.csv` 和 `experiments/inference_infra/results/summary/d19_baseline_b4_audit.jsonl`）；B4 同理。只有正式合并时才按明确的记录清单复制或汇总到新目录，并检查相同 checkpoint/硬件/软件/后端；不要用 `cat` 盲目拼整个 raw 树。
@@ -107,7 +111,7 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d19_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d19_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
 | `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/summary/d19_baseline.csv` | 独立条件的统计表 | d13_aggregate.py --output | 条件生成；有测量组时生成，可含无有效样本组 |
 | `experiments/inference_infra/results/summary/d19_baseline_audit.jsonl` | 逐行纳入/排除原因 | d13_aggregate.py --audit | 随统计成功自动生成 |

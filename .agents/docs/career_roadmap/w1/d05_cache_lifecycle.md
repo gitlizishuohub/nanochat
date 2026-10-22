@@ -42,22 +42,23 @@ knowledge_scope: W1 D5 预分配缓存生命周期与状态探查
 |---|---|---|---|
 | `experiments/inference_infra/results/w1/d05_cache_probe.json` | 缓存位置、误差、复制/reset 检查 | `d04_probe_model_and_cache.py --mode cache` | 条件生成：导入和全部断言成功后自动写入；产物首次属于 d05 |
 | `experiments/inference_infra/reports/d05_cache_path.md` | 缓存生命周期与容量公式 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d05_checks.log` | 本日终端检查输出与错误 | 首段 Bash 的 exec / tee | 自动捕获启用后的输出；命令及退出码在交流时补充，重复运行追加 |
+| `experiments/inference_infra/reports/d05_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
 
 清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；输出在执行日志捕获命令后保存到 `experiments/inference_infra/reports/d05_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d05_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
 
 ## 1. 先读缓存容器，不先读采样循环
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
-exec > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
+{
 sed -n '80,155p' nanochat/engine.py
 rg -n 'kv_cache.advance|prev_embedding|T0 =|flash_attn_with_kvcache' nanochat/gpt.py
+} > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
 ```
 
 <abbr title="KV Cache / Key-Value Cache · 每层保存已处理位置的注意力 Key/Value。nanochat 预先分配容量，用位置向量区分有效前缀和未使用区域；分配容量不等于有效长度。">KV Cache</abbr> 的两块本体形状均为 `[L,B,Tmax,Hkv,Dh]`。逐项确认：
@@ -73,8 +74,10 @@ rg -n 'kv_cache.advance|prev_embedding|T0 =|flash_attn_with_kvcache' nanochat/gp
 ## 2. 对照 Engine.generate 的两次分配
 
 ```bash
+{
 sed -n '195,310p' nanochat/engine.py
 sed -n '470,535p' nanochat/gpt.py
+} > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
 ```
 
 对照下面 `P=8,B=4,G=4` 的时间线，确认每步状态，可直接口述：
@@ -98,7 +101,9 @@ sed -n '470,535p' nanochat/gpt.py
 使用与 D4 同一份[模型与缓存探查脚本](scripts/d04_probe_model_and_cache.py)：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mode cache --prompt-tokens 8 --decode-steps 4
+} > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
 ```
 
 默认写 `experiments/inference_infra/results/w1/d05_cache_probe.json`。脚本直接调用 `GPT.forward(...,kv_cache=...)`，这样把缓存数值验证与 Engine 的结束 token/工具状态机分开。它做：

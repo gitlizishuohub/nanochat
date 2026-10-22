@@ -28,15 +28,17 @@ knowledge_scope: W3第6日实操与验收
 
 ## 开始前：固定终端和记录方式
 
-本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。
+本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+{
 python -c "import sys; print(sys.executable)"
 git status --short
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
+} > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
@@ -54,10 +56,12 @@ exec > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 使用[材料模板工具](scripts/d15_prepare_materials.py)，附上你实际拥有的证据。没有 d19_baseline.csv 时省略该 evidence，正文写待测。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
   --kind entry --output-dir experiments/inference_infra/reports/w3_reproduction_v1 \
   --evidence experiments/inference_infra/results/summary/d19_baseline.csv \
   --evidence experiments/inference_infra/d12_protocol.md
+} > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 ```
 
 `d12_protocol.md` 若未整理成文件，省略对应 evidence 参数，直接从此前聊天、矩阵和原始记录恢复真实条件，不为模板补写报告。打开生成的 `d20_reproduction_entry.md`，不要只留下方括号模板。脚本检查文件与哈希不检查内容真实性，`exists:false` 必须处理或作为缺口说明。写清项目目的是建立 nanochat 推理基线和后续受控优化验证，当前不是已完成自研模型或部署服务。
@@ -70,7 +74,7 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
 
 ## 第三步：把最短命令写到可以逐行复制
 
-依次写：激活环境 → 进入项目 → 设置真实缓存根目录 → 检查 meta/权重 → matrix 默认计划 → 选 B 执行 → aggregate。直接链接[矩阵驱动](scripts/d16_matrix.py)、[统计审计](scripts/d13_aggregate.py)与[W2基准](../w2/scripts/d12_benchmark.py)，每条命令用真实运行过的参数。
+依次写：确认自动激活的解释器 → 进入项目 → 设置真实缓存根目录 → 检查 meta/权重 → matrix 默认计划 → 选 B 执行 → aggregate。直接链接[矩阵驱动](scripts/d16_matrix.py)、[统计审计](scripts/d13_aggregate.py)与[W2基准](../w2/scripts/d12_benchmark.py)，每条命令用真实运行过的参数。
 
 不要把整份训练脚本复制进复现正文。下载与训练不是今天短路径的默认步骤；在“从零准备”段引用 W2 指导，注明训练耗时/资源未知时仍待实测。GPU 不可用时提供 CPU 短输入命令并明确它证明什么，不要求读者先去租卡。
 
@@ -85,12 +89,14 @@ python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
 最低复查可只运行帮助与以下 CPU 短输入；均由本日终端捕获检查输出。它会创建新的 CPU 记录，不覆盖第 17 日证据：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py --help
 python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --help
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
   --device cpu --random-model --prompt-tokens 32 --decode-tokens 8 --batch-size 1 \
   --warmup 3 --repeats 5 --seed 42 \
   --output experiments/inference_infra/results/raw/d20_p32_g8_b1_cpu_reproduction.jsonl
+} > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 ```
 
 ## 第五步：请读者回答四个问题
@@ -122,7 +128,7 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/results/raw/d20_p32_g8_b1_cpu_reproduction.jsonl` | 新终端 CPU 复查记录 | d12_benchmark.py | 条件生成；仅执行本日 CPU 命令且成功写入后存在 |
-| `experiments/inference_infra/reports/d20_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d20_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
 | `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 自动生成骨架，人工完善与验收 |
 | `experiments/inference_infra/reports/w3_reproduction_v1/d20_entry_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 自动生成；文件存在不等于结论通过 |

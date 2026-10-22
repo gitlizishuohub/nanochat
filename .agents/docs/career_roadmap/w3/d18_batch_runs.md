@@ -28,15 +28,17 @@ knowledge_scope: W3第4日实操与验收
 
 ## 开始前：固定终端和记录方式
 
-本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。
+本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+{
 python -c "import sys; print(sys.executable)"
 git status --short
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d18_checks.log) 2>&1
+} > >(tee -a experiments/inference_infra/reports/d18_checks.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
@@ -60,19 +62,23 @@ exec > >(tee -a experiments/inference_infra/reports/d18_checks.log) 2>&1
 使用[矩阵驱动](scripts/d16_matrix.py)，仍把实际 META 等变量从协议恢复。默认至少 5 次正式运行，CPU 分支不以速度为今天的目标。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
   --artifact-day 18 --meta "$META" --source base --model-tag "$MODEL_TAG" --step "$CHECKPOINT_STEP" \
   --batch 4 --device cuda --execute \
   --output-dir experiments/inference_infra/results/raw/w3_b4_attempt01
+} > >(tee -a experiments/inference_infra/reports/d18_checks.log) 2>&1
 ```
 
 若无 CUDA，先不要执行以上命令，GPU case 保留计划状态；另跑下面短输入的 CPU 合约例子：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
   --device cpu --random-model --prompt-tokens 32 --decode-tokens 8 --batch-size 4 \
   --warmup 3 --repeats 5 --seed 42 \
   --output experiments/inference_infra/results/raw/d18_p32_g8_b4_cpu_contract.jsonl
+} > >(tee -a experiments/inference_infra/reports/d18_checks.log) 2>&1
 ```
 
 没有必要在 CPU 上强跑长 P512×G128 并等待数小时。GPU 候选完整性由 matrix 状态表示，CPU 小样本只用于检查 B4 接口与有效 token 记账。
@@ -117,7 +123,7 @@ B4 在同条件下成功或失败都可以验收“边界记录完成”；只�
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d18_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d18_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
 | `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/raw/w3_b4_attempt01/d18_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
 | `experiments/inference_infra/results/raw/w3_b4_attempt01/d18_p32_g32_b4.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |

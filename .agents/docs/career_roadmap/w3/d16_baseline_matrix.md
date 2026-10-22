@@ -28,15 +28,17 @@ knowledge_scope: W3第2日实操与验收
 
 ## 开始前：固定终端和记录方式
 
-本日命令均从 nanochat 仓库根执行。先打开终端，激活已创建的 Conda 环境；若新终端提示找不到 `conda`，先运行 `source /home/lizishuo/miniconda3/etc/profile.d/conda.sh` 再激活，不创建另一个 `.venv`。
+本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+{
 python -c "import sys; print(sys.executable)"
 git status --short
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
+} > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
@@ -54,12 +56,14 @@ exec > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
 从 W2 训练日志抄录 `NANOCHAT_BASE_DIR`、model_tag 和 step。下面的 `d11_w2_20`、`20` 仅演示如何填变量，不表示这台机器已有对应 checkpoint；先把它们替换成 W2 验收过的值。
 
 ```bash
+{
 export NANOCHAT_BASE_DIR=/实际/nanochat缓存根目录
 MODEL_TAG=d11_w2_20
 CHECKPOINT_STEP=20
 META="$NANOCHAT_BASE_DIR/base_checkpoints/$MODEL_TAG/meta_$(printf '%06d' "$CHECKPOINT_STEP").json"
 python -m json.tool "$META"
 sha256sum "$META"
+} > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
 ```
 
 读取 `model_config.sequence_len`，再核对 `vocab_size/n_layer/n_head/n_kv_head/n_embd/window_pattern`。`P+G<=sequence_len` 是本周人为固定的可比较范围；不能用模型 RoPE 预计算更长作为超出训练上下文仍有效的证明。Meta 不能证明权重存在，还需核对同 step 的 `model_NNNNNN.pt` 与 W2 加载成功日志。
@@ -69,9 +73,11 @@ sha256sum "$META"
 使用[矩阵驱动脚本](scripts/d16_matrix.py)。脚本复用[W2 基准程序](../w2/scripts/d12_benchmark.py)，默认只生成清单，既不租 GPU 也不启动训练。
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
   --artifact-day 16 --meta "$META" --source base --model-tag "$MODEL_TAG" --step "$CHECKPOINT_STEP" \
   --output-dir experiments/inference_infra/results/raw/w3_plan
+} > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
 ```
 
 `--artifact-day 16` 标记本次新计划的首次生成日；后续复用此脚本新建执行目录时使用当天编号，已有文件不改号。默认计划不生成 raw 或子进程 log。
@@ -121,7 +127,7 @@ Engine 先建 batch=1、T=P 的预填缓存，再建 batch=B、T=P+G 的解码�
 
 | 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
 |---|---|---|---|
-| `experiments/inference_infra/reports/d16_checks.log` | 环境、只读检查、命令输出及错误 | 开始前 Bash 的 exec / tee | 自动捕获后续终端输出；退出码在聊天核对，或可选补记日志 |
+| `experiments/inference_infra/reports/d16_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
 | `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
 | `experiments/inference_infra/results/raw/w3_plan/d16_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
 | `experiments/inference_infra/d12_protocol.md` | 追加W3固定模型、缓存估算与测量协议 | 第3–4步 | 可选人工整理；协议也可由聊天和自动记录恢复 |

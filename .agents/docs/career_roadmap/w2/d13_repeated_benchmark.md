@@ -32,20 +32,21 @@ knowledge_scope: W2第6天实操与验收
 
 ## 开始前：固定 shell 与结果位置
 
-所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
-python -c "import sys; print(sys.executable); print(sys.version)"
 mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
+{
+python -c "import sys; print(sys.executable); print(sys.version)"
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d13_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
+本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d13_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -54,7 +55,9 @@ exec > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ## 第一步：检查入口与保存路径
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --help
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
 打开 [完整重复测量实现](scripts/d12_benchmark.py)，依次找 `load()`、`measure()`、`main()`。确认模型加载/hash计算在计时外；每次run创建新Engine/cache；预热与正式均保存；测量每步用 `perf_counter` 并在CUDA同步；CPU不会调用CUDA显存函数。
@@ -64,7 +67,9 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --help
 ## 第二步：先做无需训练模型的契约验证
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --random-model --prompt-tokens 8 --decode-tokens 4 --batch-size 1 --warmup 3 --repeats 5 --seed 42 --output experiments/inference_infra/results/raw/d13_p8_g4_b1_random_cpu.jsonl
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
 <abbr title="Random model · 随机初始化且没有经过训练的模型。本文只用于检查张量、生成器、计时与落盘契约；随机模型的工作负载与真实checkpoint不能混入同一性能组。">random-model</abbr> 使用2层、C=64、H=2、V=512模型和合成token映射，没有加载真实tokenizer，因此它不能代替两步训练门槛。输出应8行：3行warmup、5行measure。模型初始化有随机性，输出只用于契约检查，不是生成质量。
@@ -76,7 +81,9 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --ra
 准备好昨天记录的数据根与模型后运行：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --source base --model-tag d11_w2_20 --step 20 --prompt-tokens 32 --decode-tokens 8 --batch-size 1 --warmup 3 --repeats 5 --seed 42 --output experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cpu.jsonl
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
 CPU记录标 `CPU_FUNCTION_ONLY`，有timing不等于可以评价GPU性能。合成数据训练出的checkpoint还要在模型来源中注明synthetic；它只是一套合法的系统实验权重。
@@ -88,13 +95,17 @@ CPU记录标 `CPU_FUNCTION_ONLY`，有timing不等于可以评价GPU性能。合
 使用下一周共用的 [统计脚本](../w3/scripts/d13_aggregate.py)，先检查实际CLI：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --help
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
 实际汇总命令如下。它读取共享目录 `experiments/inference_infra/results/raw/` 下全部匹配的原始文件，按 session 和实验身份分别汇总；不会只凭 d13 文件名前缀筛选。本日验收须依据审计记录中的完整输入文件路径和 run_id，选出本次生成的两组，不能把其它日期的组数算作今天完成数：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --raw-dir experiments/inference_infra/results/raw --output experiments/inference_infra/results/summary/d13_w2_baseline.csv --audit experiments/inference_infra/results/summary/d13_w2_audit.jsonl
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
 然后按 [W3统计复核教程](../w3/d19_statistics_audit.md) 的命令生成CSV。要求把 `model_kind/device/precision/attention_backend/P/G/B/tag/step` 不同的行分开；不同session和checkpoint hash也不能无判断合并。median是正式run的中位数；<abbr title="P95 / 95th percentile · 95%样本不超过的分位值。本文汇总采用nearest-rank：排序后取ceil(0.95N)对应样本，N=5时等于最大值；不能据此断言尾延迟稳定。">P95</abbr> 在仅五个样本时信息很有限，因此交流时同时给出样本数、最小/最大值。
@@ -123,7 +134,7 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --raw-dir experim
 | `experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cuda.jsonl` | GPU checkpoint 重复记录 | d12_benchmark.py | 条件自动；仅 CUDA 分支实际运行后存在 |
 | `experiments/inference_infra/results/summary/d13_w2_baseline.csv` | 分组汇总 | d13_aggregate.py | 条件自动；实际执行统计 |
 | `experiments/inference_infra/results/summary/d13_w2_audit.jsonl` | 逐行审计 | d13_aggregate.py | 条件自动；实际执行统计 |
-| `experiments/inference_infra/reports/d13_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
+| `experiments/inference_infra/reports/d13_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
 
 原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
 

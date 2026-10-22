@@ -32,20 +32,21 @@ knowledge_scope: W2第3天实操与验收
 
 ## 开始前：固定 shell 与结果位置
 
-所有命令从仓库根目录执行。首次打开终端先运行以下准备；`conda activate` 若已可用，可省略 `source` 一行。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+
+日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
 
 ```bash
-source /home/lizishuo/miniconda3/etc/profile.d/conda.sh
-conda activate nanochat
 cd /home/lizishuo/_program_/Project/nanochat
-python -c "import sys; print(sys.executable); print(sys.version)"
 mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-exec > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
+{
+python -c "import sys; print(sys.executable); print(sys.version)"
+} > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ```
 
 解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
 
-本 shell 后续终端输出同步保存在 `experiments/inference_infra/reports/d10_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
+本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d10_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
 
 ## 今日目标与时间盒
 
@@ -56,8 +57,10 @@ exec > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ## 第一步：核对运行输入与不会覆盖的模型标签
 
 ```bash
+{
 printf '%s\n' "$NANOCHAT_BASE_DIR"
 python .agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py --check-data --output experiments/inference_infra/reports/d10_pretrain_input_check.json
+} > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ```
 
 若变量为空，先按昨天的分支设置它。`/tmp/nanochat-w2-toy` 是合成 smoke 选择，不是隐含默认值。确认剩余磁盘能装模型、优化器和日志；即便两步训练也会写 optimizer shard。标签 `d10_w2_smoke` 专门保留两步证据，后续二十步用另一标签。
@@ -67,8 +70,10 @@ python .agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py --check-data --ou
 打开 [有界训练脚本](scripts/d10_train_smoke.py)：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --help
 python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --steps 2 --model-tag d10_w2_smoke --output-dir experiments/inference_infra/reports/d10_train_smoke_2
+} > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ```
 
 此时只写 `experiments/inference_infra/reports/d10_train_smoke_2/d10_plan.json`，状态为 `PENDING`，并打印将要调用的原始训练命令；没有 `--execute` 就不训练。逐项检查参数含义：
@@ -90,7 +95,9 @@ python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --
 ## 第三步：执行真实两步并检查日志
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --steps 2 --model-tag d10_w2_smoke --output-dir experiments/inference_infra/reports/d10_train_smoke_2 --execute
+} > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ```
 
 该命令将日志写入 `experiments/inference_infra/reports/d10_train_smoke_2/d10_train.log`，终端可能暂时没有逐步输出。另一终端可以 `tail -n 30 experiments/inference_infra/reports/d10_train_smoke_2/d10_train.log` 查看进度。训练结束后打开 `experiments/inference_infra/reports/d10_train_smoke_2/d10_plan.json` 看 `returncode`。若标签目录已存在，脚本主动拒绝；选择新的标签并将后续命令一起改成该标签，不删除旧证据。
@@ -102,7 +109,9 @@ python .agents/docs/career_roadmap/w2/scripts/d10_train_smoke.py --device cpu --
 使用 [checkpoint 生成检查脚本](scripts/d10_checkpoint_probe.py)：
 
 ```bash
+{
 python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device cpu --model-tag d10_w2_smoke --step 2 --max-tokens 4 --output experiments/inference_infra/reports/d10_checkpoint_smoke_2.json
+} > >(tee -a experiments/inference_infra/reports/d10_session.log) 2>&1
 ```
 
 脚本调用官方 `load_model('base', device, phase='eval', model_tag=..., step=...)`。它验证词表大小并严格加载权重，然后对同一 prompt 运行无缓存 `GPT.generate` 与 `Engine.generate` 的 greedy 前缀。输出可能无意义，属于两步小模型预期；不要用生成文本是否通顺决定保存格式是否合法。
@@ -133,7 +142,7 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 | `experiments/inference_infra/reports/d10_train_smoke_2/d10_train.log` | 原生训练 stdout/stderr | d10_train_smoke.py | 条件自动；--execute 且标签检查通过后创建 |
 | `experiments/inference_infra/reports/d10_checkpoint_smoke_2.json` | step 2 加载与双路径结果 | d10_checkpoint_probe.py | 条件自动；执行 probe 后写出，失败也记录 |
 | `experiments/inference_infra/reports/d10_training_smoke.md` | 两步训练验收与阻塞 | 验收步骤 | 可选人工整理；可直接在聊天中回答本日问题 |
-| `experiments/inference_infra/reports/d10_session.log` | 当天终端输出与手动记录的退出码 | 开场 shell 的 tee | 自动；仅捕获启用后的输出 |
+| `experiments/inference_infra/reports/d10_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
 
 权重位于仓库外；以下是当前 `NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy` 时的完整绝对路径。使用自定义数据根时在交流中逐项提供真实绝对路径。仅真实训练保存阶段执行后生成；训练中断时不可宣称齐全：
 
