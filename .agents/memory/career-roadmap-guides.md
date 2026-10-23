@@ -3,7 +3,7 @@ name: career-roadmap-guides
 description: 维护 nanochat W1–W3 每日教程及配套实验脚本时召回目录和阅读方式约定。
 type: feedback
 created: 2026-10-15
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # W1–W3 教程组织约定
@@ -22,6 +22,8 @@ updated: 2026-10-22
 
 每日验证交流（2026-10-20 用户纠正）：用户不喜欢手写 report，要求直接修改每日教程，明确每天特异性的验证问题，由用户自行验证后与助手交流。每日正文应提供当天专属的问题和所需证据，允许在聊天中逐项简答；人工 Markdown 报告为可选整理，不作为每日验收前置。保留自动日志、结构化结果、真实命令与退出码以及未验证边界；简历、复现入口等实际材料与日常报告区分，允许先交流核对再整理。不能只套用一份通用五项报告模板。
 
+交流题补答（2026-10-23 用户纠正）：用户在每日验收回答中写“略”，表示该题由助手给出答案；用户要求写入 report 时，应补全这些题，而非将“略”原样作为最终答案。涉及实际运行结果时先查已有日志，区分已有运行与本次新运行，缺少证据时明确缺项，不编造结果。
+
 已验证环境：`/home/lizishuo/miniconda3/envs/nanochat/bin/python` 为 Python 3.10.20，PyTorch 2.9.1+cpu；CPU FP32 / SDPA，无 CUDA。2026-10-15 推理相关测试 13 passed / 10 skipped，依赖兼容性检查通过。安装及复查命令见 `.agents/docs/project-maintenance/nanochat-conda-environment-2026-10-15.md`。这些结果不代表真实 checkpoint、训练或 GPU 性能已经验收。
 
 已完成交付：`w1/`、`w2/`、`w3/` 共 21 篇教程、13 个脚本，完成 CPU 随机模型/cache、tokenizer/loader、重复基准及跨周统计接口验证。验收范围与未测条件见 `.agents/docs/project-maintenance/career-roadmap-guides-validation-2026-10-15.md`。后续从 W1 第一天实际执行，保留真实实验日志；真实训练和 GPU 性能仍待执行，不按原日历倒填完成状态。
@@ -39,5 +41,7 @@ Evidence 补充：2026-10-21 用户明确说“我想随着D1–D21去逐步看�
 Evidence 补充：用户截图指出 D2 阅读提示显示裸露星号；已统一修复 docs 中 455 处标签，MarkdownIt 本地解析确认普通文本中无残留加粗标记，正文和链接目标保持原样。
 
 Evidence 补充：2026-10-22 用户指出 D02 日志同样显示 ESC/BEL，并确认环境自动激活无需重复命令；已修复 21 篇每日教程。74 个 Bash 代码块通过 bash -n，交互 PTY 模拟确认 OSC 633 提示符未入日志、stdout/stderr 入日志、变量保留且最后命令退出 7 得以保留；这不表示当天模型实验已运行或阅读器渲染已验收。
+
+Evidence 补充：2026-10-23 用户在 D03 第 1、2 题写“略”，要求写入 report 后进一步明确“我略，你要给出你的回答啊”；补答位置为 `experiments/inference_infra/reports/d03_inference_smoke.md`。
 
 Invalidates: 用户明确改变文档结构、交付范围、每日记录偏好或实验产物目录时更新；源计划和源码变化后重新核对教程命令。
