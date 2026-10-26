@@ -131,14 +131,63 @@ python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mod
 
 ## 4. 当天自验证与交流问题及内存公式
 
-完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/reports/d05_cache_path.md` 仅供需要时可选整理，不是必交文件。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. K/V 本体、`cache_seqlens`、`prev_embedding` 分别存什么、shape 是什么？指出源码中它们的写入与最后一层推进位置，为什么不能每层推进？
-2. 对 `P=8,B=4,G=4`，从 prefill 分配到首次 yield、下次恢复，缓存容量、有效长度和 batch 怎样变化？为什么第一 token 不需要一次单 token forward？
-3. 打开本次 `d05_cache_probe.json`，逐步读出输入长度、before/after、最大误差与 greedy 是否一致。“4 步”为何只有 3 次 decode？若运行失败，停在哪步？
-4. 复制到 batch=4 时除 K/V 还要复制什么？reset 后什么清零、什么仍可能保留？用探查结果与源码说明，不把位置归零解释成存储清零。
-5. 代入本次 L、B、Tmax、Hkv、Dh 和元素字节数，K/V 理论容量是多少？为什么不能用有效长度 P 替代 Tmax，又为什么它不等于进程总内存？
-6. 本次只证明了哪种随机配置与 dtype？GPU、真实 checkpoint、长上下文与 Engine 结束/工具状态机哪些尚未覆盖，下一项应补什么？
+1. **四类缓存状态**：K、V、`cache_seqlens` 与 `prev_embedding` 分别存什么？用 L=2、B=4、Tmax=64、Hkv=2、Dh=16、C=64 写出各自 shape，并说明各自 dtype 的来源。
+
+   **通过标准**：对照 `KVCache.__init__`、`GPT.forward` 与本次配置；区分 K/V 本体、int32 有效长度及 smear 用的归一化 embedding，不能把 prev 当 K/V 别名。
+
+2. **视图、写入与推进职责**：`get_layer_cache(i)`、注意力后端写 K/V、`advance(T)` 各负责什么？若两层模型每层都推进 P=8，会使下一层从什么错误位置读写？
+
+   **通过标准**：指出层视图共享存储、写入区间和最后一层才推进的源码条件；用具体位置解释不能每层加 T，不把 advance 说成计算或写入 K/V。
+
+3. **位置编码的偏移**：prefill 后位置为 8，下一步输入一个 token 时，`T0`、RoPE 切片和 K/V 写入区间分别是什么？为什么不能仍使用位置 0 的旋转参数？
+
+   **通过标准**：沿 `GPT.forward` 到 `flash_attn_with_kvcache` 对齐同一个绝对位置；说明位置推进发生在处理完成后，引用源码而非仅凭最后文本猜测。
+
+4. **Engine 两次分配的时间线**：对 P=8、B=4、G=4，从生成器创建、B=1 prefill、分配 decode cache、复制到首次 yield，分别列出输入 shape、缓存容量、有效长度和 batch。
+
+   **通过标准**：对照 `Engine.generate` 区分 prefill 容量 P 与 decode 容量 P+G，说明第一列分数来自 prefill 最后位置并 expand；复制四份状态不等于四个独立 prompt。
+
+5. **yield 暂停与生成计数**：首次 yield 时首个采样 token 是否已经写入 cache？再取第二列时输入什么、位置如何变化？只取完 G 列就停止与再 next 一次探测结束有什么差别？
+
+   **通过标准**：按 yield 后的代码顺序推导；区分已产出的 token 和已喂入模型的 token，指出探测 StopIteration 可能触发额外 forward；直接 forward 探查不验证此生成器边界。
+
+6. **探查四步的真实含义**：本次 `steps` 各行的 `input_tokens/cache_before/cache_after/cache_seqlens/prev_embedding_shape` 是什么？`--decode-steps 4` 为何只包含三次单 token decode？
+
+   **通过标准**：逐行引用本次 JSON，默认应核对 prefill 及之后三步；不是机械复述历史 8/9/10/11，未运行或参数不同时给真实结果与差异。
+
+7. **同一前缀的数值对照**：脚本的缓存与无缓存分支是否使用同一份权重、前缀和下一 token？每步比较哪个位置，`max_abs_logit_diff`、greedy 相同与 assert_close 各证明什么？
+
+   **通过标准**：引用循环中 reference、cached、argmax 和前缀追加代码；报告实际误差，说明 atol=1e-5/rtol=1e-4 分别为绝对与相对容差，按 `atol + rtol*abs(reference)` 组合判定，不能只比较最大绝对差或编造 JSON 中不存在的 greedy_match 字段。
+
+8. **smear 状态的来源与时机**：`prev_embedding` 保存的是 smear 前还是之后的表示？prefill、单 token decode 时分别如何读取和更新；漏拷贝它为何可能从第一步 decode 开始出错？
+
+   **通过标准**：指出 `x_pre_smear`、赋值与 gate 使用顺序，说明 prev 的 shape 及来源；结合脚本非零 smear 和输出投影解释验证的区分能力，不靠放宽容差处理状态错误。
+
+9. **prefill 计算与容器复制**：`KVCache.prefill(other)` 是否执行模型前向？它复制有效前缀还是全部容量，除了 K/V 还复制什么，为什么 prev 使用 expand 后 clone？
+
+   **通过标准**：区分两个 prefill 含义，指出有效区间、位置 fill 和 prev 独立存储；引用本次 replication 字段与各行断言，说明脚本并未在复制后继续做 B=4 数值对照或专门验证修改隔离。
+
+10. **复制与批内位置的前提**：目标非空、层/head/dim 不匹配或目标容量小于源容量时，当前复制接口有什么限制？`get_pos()` 与 SDPA 读取第一行意味着能否直接支持不同长度请求？
+
+    **通过标准**：逐项对应 prefill 的真实断言，注意容量检查比较 max_seq_len 而非只有 other_pos；说明当前均匀位置假设，不把一般的批内变长能力当作已支持，不要求实际制造失败。
+
+11. **reset 的准确含义**：本次 reset 后位置和 prev 是什么，K/V 中旧数值是否必然为零？为什么有效长度外的数据在正确路径中不应被读取？
+
+    **通过标准**：引用 `reset_verified` 及源码，区分 reset 断言与“重用后数值正确”的额外验证；不将位置重置等同于清空内存或已经测过第二个请求。
+
+12. **容量公式与具体字节数**：代入第 1 题参数和 FP32，每份 K、两份 K/V 合计各多少字节？若只把 Tmax 从 64 改为 Engine 示例的 P+G=12，理论分配量如何变化？
+
+    **通过标准**：展示 `2*L*B*Tmax*Hkv*Dh*每元素字节数` 和代入过程，与 `storage_bytes_kv` 对照；区分容量与有效长度、字节与 KiB，另列 prev/位置/权重/临时张量未计入。
+
+13. **按症状定位而非猜测**：若 step 0 一致而 step 1 开始不一致、单行一致但复制检查失败、位置增加成两倍，分别优先核对哪段代码和哪些状态？
+
+    **通过标准**：明确这是故障推演，分别落到 RoPE/prev、复制有效区间/广播、最后层推进等可检查位置；有真实失败则引用首个错误，不伪造故障日志，也不只回答“放宽容差”。
+
+14. **本日通过与未覆盖范围**：本次命令、退出码、JSON 路径、随机配置、精度和后端是什么？容量耗尽、长上下文、不同批内位置、真实 checkpoint、GPU 与工具/结束状态机是否都测过？
+
+    **通过标准**：将源码推导、探查已执行断言和未执行分支分开；JSON 只在全部断言成功后写入，旧文件存在不代表重跑成功；给出下一项最相关验证，不宣称全覆盖或 KV 降低总显存。
 
 预分配 K/V 理论字节数：`2 * L * B * Tmax * Hkv * Dh * 每元素字节数`。有效 token 数 P 不应替代容量 Tmax 估算分配量。不要声称 KV Cache 降低总显存；它用额外状态换取后续少算历史。
 

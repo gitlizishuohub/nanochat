@@ -156,16 +156,46 @@ python .agents/docs/career_roadmap/w2/scripts/d10_checkpoint_probe.py --device c
 
 ## 今日自验证与交流问题
 
-自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 仅生成计划和加 `--execute` 的运行有什么区别？从 `d10_plan.json` 指出状态、真实命令、步数、batch、上下文长度与退出码，解释为什么两步实验要设置 warmup=0。
+1. D09 的哪份证据允许今天启动训练？本次解释器、数据根、设备与实际精度分别是什么？
 
-2. 训练实际执行了几次优化步，日志里的 loss 是否有限？引用 `d10_train.log` 的位置与关键输出；没有完成时说明卡在初始化、数据读取还是训练阶段。
+   **通过标准**：引用 `d10_pretrain_input_check.json.status`、两个 batch 检查及命令退出码，核对本次环境与日志；CPU 包装器使用 `setdefault`，已有 `NANOCHAT_DTYPE` 不会被强制改为 FP32，实际精度以训练日志为准，不能只引用推荐配置。
 
-3. 实际数据根、模型标签和 step2 的三个保存文件是什么？推理与恢复优化分别需要哪些文件，为什么文件存在还不足以验收？
+2. 仅生成计划与添加 `--execute` 分别产生什么？如何分辨训练未执行、成功和失败？
 
-4. 重新加载后的 probe 是否 `status=ok`？引用 `d10_checkpoint_smoke_2.json`，解释双路径输出可读性与 checkpoint 格式合法性有什么关系。
+   **通过标准**：从 `d10_plan.json` 指出 `command`、`cwd`、`status`、`steps`、`model_tag`、`base_dir`；解释未执行为 `PENDING` 且没有 `returncode`，执行后才有 `returncode` 与 `checkpoint_dir` 及训练日志；包装器计划成功退出 0 不代表训练已经运行。
 
-5. 两步训练、保存、重新加载三个门槛哪些已经通过？哪些仍未验证（如收敛、质量、GPU性能），能否进入二十步实验，下一步依据是什么？
+3. depth=4、aspect-ratio=64、head-dim=128 怎样得到模型宽度和头数？为什么最大上下文是 512？
+
+   **通过标准**：对照 `base_train.py:build_model_meta` 计算 C=256、query/KV 各 2 头并满足整除；从计划命令的 `--max-seq-len=512` 定位配置，说明后续 prompt 的 BOS 也占 P、生成需遵守 P+G≤512，不能拿词表大小代替上下文长度。
+
+4. 单设备 B=1、T=512、total-batch-size=512 时，一次参数更新包含几个微批次？假设总批量改为 1024 会怎样？
+
+   **通过标准**：引用 `base_train.py` 的 `world_tokens_per_fwdbwd`、`grad_accum_steps` 与整除断言，计算原配置累积 1 次、假设改为 1024 累积 2 次；解释 backward 累加梯度、loss 除以累积次数，而 optimizer.step 在累积完成后更新一次，区分 token 数与句子数。
+
+5. 一个训练微批次如何从 `[B,T]` 的 x/y 得到 loss，再完成一次更新？
+
+   **通过标准**：按 `gpt.py:GPT.forward` 与 `base_train.py` 说明输出 `[B,T,V]`、去词表 padding、FP32 softcap 后交叉熵、目标为下一 token、有效目标归约，随后 backward、学习率/优化器更新及清梯度；可复用 D09 的错位例子，不能把 logits 直接当预测 ID。
+
+6. 为什么显式限制两步、warmup=0、关闭评估/采样仍需要 token_bytes 和相关依赖？
+
+   **通过标准**：引用计划中 `--num-iterations=2`、`--warmup-steps=0`、三个频率 -1 及 `base_train.py` 的初始化和调度分支；解释两步不适用默认 40 步预热，显式步数覆盖自动预算，评估关闭不跳过模块导入和 `get_token_bytes`，不声称因此能无数据训练。
+
+7. 实际执行了几次优化更新？日志 loss 是否有限，step 2 保存是否意味着进行了第三次更新？
+
+   **通过标准**：引用 `d10_train.log` 的 step 0/1 训练行、末尾保存行及真实退出码；依据 `base_train.py` 的 `last_step`、保存后 break 解释两次更新后在 step=2 保存，没有第三次 optimizer.step；未完成则报告停在哪一阶段及已观察范围。
+
+8. 当前标签对应哪三个原生 checkpoint 文件？推理与恢复优化各需要什么，如何避免覆盖两步证据？
+
+   **通过标准**：列出真实数据根下 `model_000002.pt`、`meta_000002.json`、`optim_000002_rank0.pt`；依据 `checkpoint_manager.py` 区分参数/配置与优化器、训练状态，说明包装器拒绝已存在标签，换新标签并同步后续命令，文件存在不能替代重新加载。
+
+9. 重新加载后的双路径检查通过了吗？greedy 前缀一致具体比较什么，又没有比较什么？
+
+   **通过标准**：引用 `d10_checkpoint_smoke_2.json` 的 `status`、`reference_ids`、`engine_ids`、`common_prefix_match`、`model_config` 及退出码；解释严格加载、词表大小检查、temperature=0、包含终止 ID 的共同前缀，Engine 可提前结束，脚本没有证明逐层 logits 等价或生成文本质量。
+
+10. 训练、保存、重载三个门槛是否全部通过，是否能进入 D11？如果 OOM、非有限 loss 或训练未完成，影响范围是什么？
+
+    **通过标准**：把计划 `returncode`、日志、三个文件和 probe 结果逐一对应；缺一则说明真实错误或 `PENDING` 并暂缓二十步，不以无意义文本判定格式失败，也不以两步成功宣称收敛、泛化、GPU 性能或长期稳定。
 
 离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

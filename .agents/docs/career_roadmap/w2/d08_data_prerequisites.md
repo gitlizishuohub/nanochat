@@ -126,14 +126,46 @@ rg -n 'tokenizer_dir|token_bytes|vocab-size|max-chars' scripts/tok_train.py nano
 
 ## 今日自验证与交流问题
 
-自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 当前真正使用的数据根是哪一个绝对路径？对照 `d08_data_inventory.json` 的 `base_dir` 与当前 `NANOCHAT_BASE_DIR`，说明脚本 `--base-dir` 为什么不会自动改变训练路径。
+1. 今天用哪个 Python、数据根和精度设置？库存脚本的盘点路径与后续训练实际读取的路径一致吗？
 
-2. `tokenizer.pkl` 与 `token_bytes.pt` 分别来自哪里，是否存在、可信且属于同一套词表？引用库存字段；今天哪些内容仍未验证？
+   **通过标准**：引用 `d08_session.log` 的解释器输出和当前环境变量，给出展开后的绝对路径；对照 `d08_data_inventory.json.base_dir` 与 `common.py:get_base_dir`，解释 `--base-dir` 只影响本次库存、不会修改 shell 环境或训练路径。
 
-3. 实际 train/val 文件各有哪些？为什么只有一份 shard 会使训练为空？新数据目录存在但为空时，旧目录会不会被使用？给出源码检索位置。
+2. 分词器、语料分片和模型权重各承担什么职责？为什么相同词表大小仍不足以说明两个 tokenizer 可以替换？
 
-4. 你选择 existing、isolated-synthetic 还是 blocked？引用依赖检查与退出码，说明下一条准备命令，以及磁盘或网络条件是否已确认。
+   **通过标准**：分别说明文本与 ID 映射、训练/验证文本来源、模型参数；依据 `tokenizer.py:RustBPETokenizer` 与 `checkpoint_manager.py:build_model` 解释维度检查只能核对词表大小，不能证明每个 ID 的含义和特殊标记协议相同。
+
+3. 库存 JSON 怎样表示 tokenizer 两个文件是否存在？你能据此确认它们属于同一词表、内容正确且来源可信吗？
+
+   **通过标准**：读取 `files` 中两个真实路径的 `exists`、`bytes`，说明 `tokenizer.pkl` 保存编码对象，`token_bytes.pt` 保存逐 ID 字节长度；来源和配套性另引生成记录，未知时明确未知，不能把非零文件大小当作内容验收。
+
+4. 假设同时存在新旧数据目录，新目录缺失、存在且为空、存在且有文件三种情况分别会读哪里？
+
+   **通过标准**：对照 `dataset.py:list_parquet_files` 和 `d08_data_check.py:main` 的存在性分支逐一推导；说明只有新目录不存在才回退，创建空目录会挡住旧数据，不能凭库存退出码决定目录回退。
+
+5. 实际哪些 parquet 文件归 train，哪个归 val？假设文件名为 `a.parquet`、`b.parquet`、`c.parquet`，分配结果是什么？
+
+   **通过标准**：引用库存的 `parquet_files`、`train_shards`、`val_shards` 和 `split_rule`，按文件名排序列出实际分组；概念例子给出 train=a,b、val=c，并定位 `dataset.py:parquets_iter_batched` 的切片。
+
+6. 目录只有零份或一份 shard 时，库存会报告多少 train/val，为什么不能继续声称训练输入就绪？
+
+   **通过标准**：依据 `d08_data_check.py` 计算零份为 0/0、一份为 0/1，说明 `ready_for_content_check` 至少要求两份；结合 loader 的训练 split 解释空数据可能导致取批次无法前进，复制同一真实 shard 不能证明验证独立。
+
+7. `dependencies` 全为 true、库存退出 0，分别证明了什么？还缺哪些内容检查？
+
+   **通过标准**：列出脚本检测的 torch、rustbpe、tiktoken、pyarrow，说明 `find_spec` 仅表示可发现，不能证明可导入或兼容；解释 `ready_for_content_check` 的完整条件及 `content_validated=false`，未检查 parquet 的 text、token ID、往返或批次。
+
+8. 这次库存命令是否真的执行，输出与退出码一致吗？缺失项具体影响明天的哪一步？
+
+   **通过标准**：提供 `d08_data_inventory.json` 路径、库存命令和即时退出码；按实际 `ready_for_content_check` 区分 0 与 2，并逐项引用缺文件、分片或依赖字段；没有本次运行时可复用注明日期的历史证据，未覆盖部分保持 `PENDING`。
+
+9. 你今天选已有数据、隔离合成数据还是依赖受阻分支？下一步应使用哪个现有入口？
+
+   **通过标准**：根据库存缺口给出选择依据：已有可信数据进入 `d09_roundtrip.py`，无数据但依赖齐全使用 `d09_prepare_toy.py --base-dir` 的全新目录，缺依赖先定位具体包；说明不会覆盖既有数据，合成分支只证明功能。
+
+10. 今天哪些结论能验收，哪些必须留到 D09 或之后？为什么不必为了通过 D08 启动官方大数据下载？
+
+    **通过标准**：引用库存 JSON、会话日志及路径源码，区分路径/存在性盘点与内容、训练、质量的未验证边界；解释 `dataset.py` 的 `-n 1` 还会追加末尾验证 shard，本日离线主线不要求下载，不能用帮助成功或文件存在代替实验通过。
 
 离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

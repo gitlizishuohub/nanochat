@@ -125,13 +125,43 @@ python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_
 
 ## 4. 当天自验证与交流问题
 
-完成前面的检查后，按下面当天问题自行验证，再直接在聊天里与我交流。每题可用短句、数值和证据路径回答；未执行、失败或不理解的地方如实说明，无需排版或长文。`experiments/inference_infra/d02_env.md` 仅供需要时可选整理，不是必交文件。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 这次脚本真正用了哪个 Python 和 Conda 环境？从 JSON 的 `python`、`conda_prefix` 与终端路径交叉确认，是否混入其他环境？
-2. 当前 commit 与工作区改动是什么？对照 `git_head.stdout`、`git_status.stdout`，哪些会影响后续实验复现？
-3. PyTorch 包版本存在是否就能运行？结合 `packages`、`torch_runtime.exit_code` 和 stderr 说明本次导入结果、失败原因或未完成安装项。
-4. `cuda_build`、`cuda_available`、`nvidia_smi` 各证明什么？依据本次采集判定 CPU/GPU 可执行范围，不把工具缺失等同于物理无卡。
-5. `NANOCHAT_BASE_DIR` 的实际展开路径是什么？tokenizer、语料、checkpoint 哪些仅有候选位置、哪些尚未核验？D3 的 CPU 测试条件是否齐备？
+1. **解释器与环境一致性**：本次 `python`、`sys.executable` 和 `CONDA_PREFIX` 实际分别指向哪里？JSON 的 `python/conda_prefix` 是否与终端检查一致？
+
+   **通过标准**：引用本次 `d02_environment.json` 与终端输出；解释环境激活只影响解释器选择，不能替代包导入验证，发现不一致先修正再运行模型。
+
+2. **源码版本与工作区**：当前 `git_head.stdout` 和 `git_status.stdout` 是什么？若 HEAD 相同但源码有未提交修改，后续两次实验能否直接视为相同版本？
+
+   **通过标准**：说明 commit 与工作区差异共同决定实际源码；保留原有改动并标清影响实验的文件，不为获得干净状态而清空工作区。
+
+3. **包元数据与运行能力**：从 `packages` 选 torch 和 pytest，版本是否可见？再读 `torch_runtime.exit_code/stdout/stderr`，实际 PyTorch 导入是否完成？
+
+   **通过标准**：版本来自当前解释器，导入状态来自子进程；包存在但导入失败时给出原始错误，不判模型测试通过；命令超时或缺失时检查 `error`，不假设总有 exit_code。
+
+4. **CUDA 的三类证据**：本次 `cuda_build`、`cuda_available` 与 `nvidia_smi` 各是什么？CPU wheel、驱动工具可见、进程可用 CUDA 之间是什么关系？
+
+   **通过标准**：先在 `torch_runtime.exit_code=0` 后解析其 stdout 内的 JSON；分开记录 PyTorch 构建、当前进程与外部驱动信息，不由 nvidia-smi 缺失推断物理无卡。
+
+5. **依赖约束**：当前 Python 和 torch 版本是否符合 `pyproject.toml`？cpu/gpu extra 与 dev 组分别解决什么问题，为什么不能靠激活 Conda 或只安装 torch 判断测试依赖齐备？
+
+   **通过标准**：指向 Python 最低版本、torch 版本约束、cpu/gpu 互斥配置及 dev 中 pytest；对照实装版本，不要求重装已可用环境，不混用两套 extra。
+
+6. **计算精度的来源**：设备、参数存储类型和 `COMPUTE_DTYPE` 是否相同？`NANOCHAT_DTYPE` 的显式设置与默认检测如何决定当前进程的计算精度？
+
+   **通过标准**：引用 `common._detect_compute_dtype()` 的优先级与导入时求值位置；环境 JSON 不直接记录全部 dtype，需补源码依据或实际输出，不能由包版本推断精度。
+
+7. **数据根目录与存在性**：本次 `NANOCHAT_BASE_DIR` 是否设置，实际数据根路径是什么？tokenizer、语料、checkpoint 的候选位置中哪些只确认了目录，哪些尚未检查文件？
+
+   **通过标准**：对照环境 JSON、只读路径检查与 `get_base_dir()`；区分环境变量原值、默认路径和文件完整性，不把根目录存在当作资源齐备。
+
+8. **盘点产物与采集边界**：本次 JSON 的 `recorded_at`、命令与输出路径是什么？脚本是否下载、安装或训练；外部命令失败后哪些信息仍能保存？
+
+   **通过标准**：指出 UTC 时间与本地执行日期的区别、子进程错误保留方式及重复执行覆盖行为；终端日志与 JSON 分开定位，未重新采集就不称为本次新结果。
+
+9. **D3 是否具备运行条件**：根据本次证据，D3 CPU 测试现在能否启动？如缺 torch/pytest 或有动态库错误，最先修复哪项；GPU 部分应标什么状态？
+
+   **通过标准**：列出已满足条件、实际阻塞和最小下一步；标准库盘点完成与模型运行通过分别判定，无 CUDA 可继续 CPU，GPU 保留 `PENDING_GPU`。
 
 <abbr title="dirty worktree · Git 工作区包含尚未提交的改动。记录它是为了说明实际执行源码可能不只由 commit 决定，不表示应清空这些改动。">dirty 状态</abbr> 需要可追溯；只写一个 commit 而隐藏源码改动会让后续性能对比无法复现。
 

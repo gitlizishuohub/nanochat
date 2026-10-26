@@ -82,9 +82,9 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 
 ## 第三步：核查哪些行被排除
 
-脚本要求：phase=measure、status=ok、实际 G 步、G−1 个后续时间、B 行均有效生成 G 个 token、正且有限的耗时、合法上下文、总时间大致等于 TTFT 加后续时间。提前结束、强制 token 导致计数不足、错误、截断和非法时间都写入 audit 的排除原因。预热不计入正式样本，但仍检查 run_id 是否重复，并要求正式GPU结论所用session至少3次成功预热。未知schema_version的正式行标invalid并留审计记录。表中另保留有效行的peak_allocated_bytes和peak_reserved_bytes的median/min/max；CPU字段为空，不填0。
+脚本要求：phase=measure、status=ok、实际 G 步、G−1 个后续时间、B 行均有效生成 G 个 token、正且有限的耗时、合法上下文、总时间大致等于 TTFT 加后续时间。非预热行中的提前结束、强制 token 导致计数不足、错误、截断和非法时间都写入 audit 的排除原因。预热不计入正式样本，但仍检查 run_id 是否重复，并要求正式GPU结论所用session至少3次成功预热。未知schema_version的正式行标invalid并留审计记录。表中另保留有效行的peak_allocated_bytes和peak_reserved_bytes的median/min/max；CPU字段为空，不填0。
 
-组键包含 session_id、模型权重与tokenizer哈希、来源与 step、seed、模式、设备、精度、后端、P/G/B、完整 env 和 model_config，环境不同或重复session不会仅因为形状相同就合并。没有有效正式样本标 `NO_VALID_SAMPLES`；有有效行的 CPU 或 random 模型标 `CPU_OR_RANDOM_CONTRACT`。GPU checkpoint 有效行少于 5 标 `INSUFFICIENT_SAMPLES`，同session不足3次成功预热或有失败预热则标 `INSUFFICIENT_WARMUP`。`GPU_BASELINE` 只证明样本结构满足条件，仍需人工确认权重哈希、输入和背景负载。
+组键包含 session_id、模型权重与tokenizer哈希、来源与 step、seed、模式、设备、精度、后端、P/G/B、完整 env 和 model_config，环境不同或重复session不会仅因为形状相同就合并。没有有效正式样本标 `NO_VALID_SAMPLES`；有有效行的 CPU 或 random 模型标 `CPU_OR_RANDOM_CONTRACT`。有有效行的 GPU checkpoint 组若同session不足3次成功预热或有失败预热，优先标 `INSUFFICIENT_WARMUP`；预热满足但有效正式行少于5时标 `INSUFFICIENT_SAMPLES`。`GPU_BASELINE` 只证明样本结构满足条件，仍需人工确认权重哈希、输入和背景负载。
 
 ## 第四步：手算一个小例子核对单位
 
@@ -99,7 +99,7 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 - n_valid=0：保留该组失败数，下一次修复后重跑新 attempt。
 - 没有 GPU：基线表明确 CPU 契约，不画 GPU 加速图，不把 pending 填0。
 
-验收：d19_baseline.csv 存在或有无数据阻塞说明；每个有效统计带 run_ids；每个排除行有 audit 原因；单位、P95方法、样本数、失败数和设备明确。下一天用真实通过的命令写复现入口。
+验收：d19_baseline.csv 存在或有无数据阻塞说明；每个有效统计带 run_ids；每个被排除的非预热行有 audit 原因，预热另从 raw 核查；单位、P95方法、样本数、失败数和设备明确。下一天用真实通过的命令写复现入口。
 
 ## 本日脚本与产物清单
 
@@ -123,12 +123,47 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 
 ## 本日自验证与交流
 
-按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 本次聚合具体读了哪个 raw 目录、生成哪份 CSV/audit？为什么没有混入计划、不同 attempt 或不同环境的样本？指向实际组键与 run_ids。
-2. 抽一个真实文件行号和 run_id，给出 TTFT、decode_step_ms、generated_tokens、elapsed_ms，自己复算 TPOT 与 tokens/s，与自动值相差多少？
-3. 指出一条被排除的行及 audit 原因；若没有排除行，就解释一个实际纳入行如何满足完整 G 步、有效 token 和计时检查。
-4. 当前 n_valid、预热数和组状态是什么？5 个样本的 P95 怎么取，为什么不能声称稳定尾延迟？哪些 GPU/权重/背景负载条件仍未验证？
+1. **输入选择与输出归属**：本次raw-dir、CSV、audit的完整路径是什么？扫描是否递归、匹配哪些文件名，为何matrix不能当raw？
+
+   **通过标准**：引用实际聚合命令与glob，不混不同attempt树；无匹配、只有预热或无测量组按真实报错说明，不用空表伪装完成，重复执行会重写summary/audit。
+
+2. **分组身份与防混并**：取两个P/G/B相同的记录，哪些字段决定能否同组？session、权重/词表/输入hash、环境、config分别如何处理？
+
+   **通过标准**：逐项对应KEYS及env/model_config，说明不同session不会自动合并；CSV run_ids追溯有效行，只有人工核查后才能考虑跨attempt对照，不盲目cat目录。
+
+3. **一行完整性检查**：选一个真实measure+ok，怎样核验上下文、G列、G−1间隔、B行有效数和总数、正有限时间及elapsed一致性？
+
+   **通过标准**：引用metrics每条判断与原始字段，status=ok仍需内容验证；时间一致性按脚本允许的rel_tol/abs_tol核对，缺字段/未知schema进入invalid原因。
+
+4. **逐 run 手工复算**：给出一个run_id的TTFT、decode_step_ms、generated_tokens、elapsed_ms，复算TPOT和tokens/s，与自动结果相差多少？
+
+   **通过标准**：提供file/line/run_id、公式和单位；TPOT为后续步算术均值，端到端吞吐含TTFT，不把上游infer_bench的步内中间值/排除TTFT吞吐混入。
+
+5. **跨运行的统计顺序**：自动表怎样从每run指标得到median/min/max/P95？G=1时TPOT怎样保留，能否将所有step混成总体TPOT？
+
+   **通过标准**：对应metrics与聚合循环，解释先每run再跨run及None/空单元格；区别median(tokens/s)与总token/总时长，不将两种统计因数值接近而混写。
+
+6. **P95 的可手算定义**：对教学样本[9,1,5,2,3]ms计算median、nearest-rank P95、min/max；为什么不能把结果写成稳定的95%服务保障？
+
+   **通过标准**：注明假设，排序并按ceil(0.95N)定位，N=5时P95取最大值；同时对照真实组的n_valid，区分经验分位数、置信区间与线上保障。
+
+7. **排除行与 audit 范围**：找一条被排除的非warmup行，reason是什么；若没有排除行，选纳入行逐项解释。预热为什么不出现在audit和n_total中？
+
+   **通过标准**：对照audit的file/line/run_id/included/reason与warmup分支continue；预热另从raw检查，未知schema/early_stop/error不能静默消失，缺真实异常不必制造失败。
+
+8. **重复、损坏与样本账**：n_total、n_valid、n_excluded与有效run_ids怎样对应？重复run_id、缺run_id、坏JSON和只有warmup时脚本怎样处理？
+
+   **通过标准**：说明n_total为该组非warmup条目，重复ID在预热也检查；解析/身份错误可使聚合中止，不能保证仍产出audit，应保留原件和退出码，不能改run_id制造新样本。
+
+9. **分层状态与预热**：实际conclusion_status和warmup_status是什么？NO_VALID_SAMPLES、CPU_OR_RANDOM_CONTRACT、INSUFFICIENT_WARMUP、INSUFFICIENT_SAMPLES、GPU_BASELINE分别需什么条件？
+
+   **通过标准**：按脚本优先级判断：先有效样本，再设备/模型及预热/数量；同身份session至少3次status=ok且schema=1预热，GPU基线还需≥5有效正式行；预热仅按 status/schema 记账，没有执行 metrics() 对正式行的完整检查，GPU_BASELINE仍需人工核身份和负载。
+
+10. **内存、负载与结论范围**：表中allocated/reserved怎样从有效行汇总，CPU空单元格为什么不写0？哪些权重、背景负载、GPU路径仍缺人工核验？
+
+    **通过标准**：引用实际内存median/min/max或未测状态，区分分配器保留与活跃模型内存；只报告现有数据支持的结论，下一天复现入口引用真实通过命令和限制。
 
 ## 核对记录与完成标记
 

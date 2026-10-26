@@ -123,13 +123,47 @@ python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mod
 
 ## 5. 当天自验证与交流问题、失败处理及验收
 
-对照源码与本次 JSON 自行验证后，直接在聊天里回答；短句和尺寸即可，无需手画图或写长文。`experiments/inference_infra/reports/d04_model_path.md` 仅供可选整理，不是必交文件。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 本次 B、T、C、Hq、Hkv、Dh、V、L 各是多少？从 `[B,T]` 推到 `[B,T,V]`，解释为什么 K/V 线性输出比 Q 窄。
-2. 对照 hook JSON，`c_k/c_v` 的 `[1,8,32]` 如何变成 `[1,8,2,16]`？hook 截获的是哪一步，哪些尺寸需要依据源码推导？
-3. RMSNorm、RoPE、Q/K norm、smear、backout、softcap 各在链路哪个位置，哪些保持 shape？为什么这里无缓存 `T=1` 不合法？
-4. `GPT.generate` 如何从最后位置 logits 选 token、拼回前缀？为什么下一步又处理越来越长的输入？传入 targets 时返回值又有什么不同？
-5. 给出本次 `d04_shapes_probe.json` 的实际 logits shape/dtype、后端与有限值结果，或最早错误；为什么脚本启用非零输出投影和 smear，随机模型成功仍不能证明什么？
+1. **配置符号与合法性**：本次 B、T、C、Hq、Hkv、Dh、V、L 各是什么？怎样由 C/Hq 得到 Dh，Hq/Hkv 必须满足哪些整除关系？
+
+   **通过标准**：引用探查配置和 `CausalSelfAttention.__init__`；逐项说明轴含义，区分 T 与缓存容量，不能只抄一串数字。
+
+2. **整数到词表分数**：从 `[B,T]` 的 token ID 开始，依次写出 embedding、block、lm_head 和最终 logits 的形状；Vpad 与 V 在哪里分开？
+
+   **通过标准**：对照 `GPT.forward` 及 hook 的实际模块名，说明查表后变向量、lm_head 投影到补齐词表、裁回实际 V；普通推理返回 `[B,T,V]`。
+
+3. **Q/K/V 的线性层与多头布局**：在默认配置下，为什么 hook 的 Q 输出是 `[1,8,64]`、K/V 是 `[1,8,32]`？它们各如何 reshape，多头结果又如何合并回 C？
+
+   **通过标准**：同时给出线性输出和 `[B,T,H,Dh]` 布局，并指出 hook 截获位置；用 Hq=4/Hkv=2 解释宽度，不将线性输出误写成多头输出。
+
+4. **GQA 与注意力输出**：Query heads 与 K/V heads 为什么可以数量不同？注意力返回按 Hq 还是 Hkv 排列，哪种 head 数决定缓存存储？
+
+   **通过标准**：结合注意力调用和 D4 形状表解释共享关系、输出和缓存轴；不因 K/V 较窄就认为残差通道也缩小。
+
+5. **归一化与位置处理**：embedding norm、Q/K norm、RoPE 各作用于什么张量、位于哪一步，是否改变 shape？当前 RMSNorm 有无可学习权重？
+
+   **通过标准**：指向 `norm`、`apply_rotary_emb` 与 attention 调用顺序，说明 RoPE 处理 Q/K 而非向 embedding 加位置向量；不杜撰 norm 的显式 epsilon。
+
+6. **额外路径的位置**：smear、Value Embedding、残差混合与 backout 各在什么位置参与？为什么不能把 V 的来源只归结为 `c_v(x)`？
+
+   **通过标准**：指出 smear 混入前一位置 embedding、Value Embedding 经 gate 混入 V、backout 在输出投影前处理残差；只需定位和 shape，不要求推导训练收益。
+
+7. **返回值、精度与数值范围**：最终 logits 为什么是 FP32，softcap 做什么？传入 targets 时返回值如何改变，与 `[B,T,V]` 分数有什么区别？
+
+   **通过标准**：引用 `.float()`、softcap 和交叉熵分支；说明形状链只适用于不传 targets，默认损失归约与 logits 返回不同，不能由 FP32 logits 断言所有计算都为 FP32。
+
+8. **无缓存生成控制流**：`GPT.generate` 如何选最后位置的下一 token、拼接回输入？P=8 连续生成三次时，每次 forward 的输入长度是多少，为什么无缓存 T=1 在本版本不合法？
+
+   **通过标准**：对照循环和 smear 的 T>1 断言推导长度；区分生成 token 与再次输入 token，不能把这个入口描述成单 token 缓存 decode。
+
+9. **探查条件与区分能力**：脚本在哪设置 CPU、FP32、seed 和线程数？为什么在 `init_weights()` 后额外设置非零投影与 smear 系数，默认零投影可能掩盖什么？
+
+   **通过标准**：引用探查脚本初始化顺序和模型初始化实现；说明是随机功能验证而非训练或性能实验，不由固定 seed 推断跨设备位级一致。
+
+10. **实际结果与失败边界**：本次 JSON 的 `mode/config/seed/USE_FA3/logits_shape/logits_dtype/shapes` 是什么？有限值由哪个断言保证，是否真的有独立 JSON 布尔字段？
+
+    **通过标准**：给出本次命令、退出码与输出路径，按真实字段答题，成功返回才支持脚本断言已执行；失败保留最早错误，旧 JSON 不作本次证据，GPU/质量仍未验证。
 
 下图可直接用作核对辅助，无需重新绘制；它表示不传 targets、无缓存且 `T>1` 的 forward 路径：
 

@@ -134,12 +134,47 @@ Engine 先建 batch=1、T=P 的预填缓存，再建 batch=B、T=P+G 的解码�
 
 ## 本日自验证与交流
 
-按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。GPU 未执行继续保留 `PENDING_GPU`，不要求为验收补跑大任务或填造 GPU CSV。
 
-1. 实际 source、model_tag、step、tokenizer 来自哪里？给出 meta、权重或加载日志路径与已核对的哈希；哪些文件仍缺失？
-2. 你的 sequence_len 是多少？12 个 P/G/B 组合中哪些合法、哪些 INVALID_CONTEXT？指向 d16_matrix.jsonl 的实际行，解释为什么不能偷偷截短。
-3. 选一个合法 B4 组合代入缓存公式：L、Hkv、Dh、s 分别来自哪里，两个缓存共存时粗估多少字节？说明它未包含哪些内存，实测峰值是否仍待验证。
-4. 你冻结了哪些输入、采样、预热、正式次数、精度和后端条件？用矩阵/自动记录或聊天中的完整参数恢复一次计划；为什么有 CUDA 也不保证 FA3？
+1. 今天冻结的模型究竟是哪一份，为什么单独写 `d4` 或“最新模型”不够？
+
+   **通过标准**：给出真实 `NANOCHAT_BASE_DIR`、source、model_tag、step及对应 meta/权重/tokenizer路径或缺项，引用 W2 已加载日志与已核对哈希；定位 `nanochat/checkpoint_manager.py::load_model_from_dir` 的自动选 tag/step逻辑，说明不固定会随目录变化。缺 checkpoint 时标前置阻塞，不伪造 meta。
+
+2. meta 中哪些配置决定矩阵和缓存，为什么 meta 存在仍不能证明权重可加载？
+
+   **通过标准**：从实际 `model_config` 读出 `sequence_len/vocab_size/n_layer/n_head/n_kv_head/n_embd/window_pattern`，说明配置重建模型、权重提供参数、tokenizer提供ID契约；引用同 step权重和 W2加载证据。词表大小检查不能证明两份 tokenizer 的ID映射相同，仍需固定来源与哈希。
+
+3. 12 个候选怎样生成？若假设 `sequence_len=128`，合法和非法各有几个？你的真实配置结果又是什么？
+
+   **通过标准**：列出 `P=32/128/512`、`G=32/128`、`B=1/4` 的笛卡尔积，并按 `P+G<=sequence_len` 判断；假设128时只有P32/G32的B1、B4两组合法，其余10组非法。再引用真实 `d16_matrix.jsonl` 行/状态计数；尚无真实 meta 时仅做注明假设的推演，不声称已生成计划。
+
+4. 为什么不能把 P512 自动截成短输入后仍称 P512，RoPE 预计算更长是否允许这样绕过上下文门槛？
+
+   **通过标准**：定位 `scripts/d16_matrix.py` 的 `supported` 与 W2 `d12_benchmark.py` 的上下文拒绝，说明本周采用训练 `sequence_len` 范围、不自动截断；`nanochat/gpt.py` 中更长旋转位置缓存不证明模型已验证长上下文。引用一个真实非法行或明确假设的反例。
+
+5. 默认计划、`--execute` 和 `--batch` 分别改变什么，计划中的 raw_file 是否证明文件已经存在？
+
+   **通过标准**：引用 `scripts/d16_matrix.py` 的命令数组和执行条件，说明默认仅写矩阵，`--execute` 才调用基准，`--batch` 只筛执行子集且仍保留全部候选；核对实际 manifest的 `execute/status/command/raw_file`。没有执行就不要求子进程 raw/log，也不能说 `PROCESS_OK`。
+
+6. 这里的 P、G、B 和固定 prompt各代表什么，为什么 B4 不是四条独立请求？
+
+   **通过标准**：定位 W2 `d12_benchmark.py::measure` 与 `nanochat/engine.py::Engine.generate`，说明输入为 `[BOS]+[1]×(P−1)`、B为同一prompt复制后的样本数、G为要求yield步数；固定 `prompt_fill_id/prompt_sha256/seed/temperature=0`，更换fill ID属于新输入实验，不能解释成质量测试或在线并发服务。
+
+7. 请手算一个 B4 组合的解码缓存及复制时两份缓存共存的字节数，并说明各参数来源。
+
+   **通过标准**：优先用真实配置；无合法组合时注明假设。算出 `Dh=n_embd/n_head`，用 `2×L×B×(P+G)×Hkv×Dh×s` 和 `2×L×Hkv×Dh×s×[P+B×(P+G)]`，给出代入、字节及换算；定位 `KVCache` 分配和 `prefill`，不按Q头数或滑窗读取长度估算分配。
+
+8. 缓存估计为什么不等于显存峰值，s又怎样确定？
+
+   **通过标准**：定位 `nanochat/common.py::_detect_compute_dtype` 和 Engine的缓存dtype，说明s来自实际compute dtype，不从权重文件名猜；列出未计入的权重、logits、激活、RoPE、prev_embedding、分配器保留等。实测峰值未取得就标待测，不用粗估宣称“必定装得下”。
+
+9. 想让明天的基准可比较，哪些条件必须能从现有记录恢复？CUDA可用是否意味着FA3已启用？
+
+   **通过标准**：给出输入构造、模型身份、seed、预热3次/正式至少5次、每步同步、软件/硬件、precision及实际后端的完整恢复依据；定位 `nanochat/flash_attention.py::_resolve_use_fa3`，说明库/硬件与bf16条件，未来raw中的 `attention_backend` 才是该次记录，不能把计划的auto当实测后端。
+
+10. 今天结束时怎样判断计划交付完成，哪些情形仍必须保留待测或失败？
+
+    **通过标准**：对真实矩阵列出总数与 `INVALID_CONTEXT/PENDING_GPU`（或实际设备的待执行状态）数量，核对新输出目录与 `--artifact-day 16`；缺meta、重复目录拒绝覆盖等以真实日志/源码分流说明。12组有明确状态不等于12组已通过，没有GPU继续保留 `PENDING_GPU`，不要求生成性能CSV。
 
 ## 核对记录与完成标记
 

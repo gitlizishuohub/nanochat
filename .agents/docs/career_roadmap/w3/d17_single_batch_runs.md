@@ -149,12 +149,47 @@ python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/resu
 
 ## 本日自验证与交流
 
-按以下问题自行核查后直接发我；每项给关键输出、文件/行号或原始字段即可。没有执行的部分说明原因和未验证范围，不要求写成报告。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。GPU 未执行继续保留 `PENDING_GPU`，不要求为验收补跑大任务或填造 GPU CSV。
 
-1. 今天实际走 GPU checkpoint 还是 CPU random 分支？给出 matrix、raw、log 或测试输出路径，说明哪些路径通过、哪些 skip 或依赖阻塞。
-2. 选一个 B1 case：计划状态、退出码、正式行总数和完整有效数各是多少？PROCESS_OK 为什么不能直接作为基线通过？
-3. 从一个真实 run_id 解释 TTFT、decode_step_ms、actual_decode_steps 和 generated_tokens 的含义与单位；哪个字段能看出提前结束或有效 token 不足？
-4. 所有 B1 候选是否都能追踪到成功、失败、非法上下文或待 GPU？列出尚未验证的项；CPU 结果能证明什么，不能证明什么？
+1. 今天应走 GPU checkpoint 分支还是 CPU random 分支，判断来自哪些实际检查？
+
+   **通过标准**：引用 `d17_checks.log` 中解释器、torch版本、`cuda_available`、设备和命令退出码；GPU分支还需W2模型/tokenizer加载证据。import失败属于依赖阻塞，CPU随机夹具属于接口检查，均不能当真实GPU checkpoint基线。
+
+2. 六个 B1 候选中，今天实际执行了哪些，其他候选为什么没有执行？
+
+   **通过标准**：从矩阵 `case_id/sequence_len/status/execute` 恢复P32/128/512与G32/128的B1状态，区分非法上下文、尚待GPU、成功和失败；B4仍为未选中候选。只有CPU分支时引用原计划并保留GPU状态，不要求填GPU结果表。
+
+3. GPU执行命令怎样确保复用昨天冻结的模型和协议，恢复时为什么要新建attempt目录？
+
+   **通过标准**：定位实际命令中的 `--source/--model-tag/--step/--batch 1/--device cuda/--execute/--artifact-day 17` 及缓存根目录，核对矩阵 `command` 的预热3次/正式至少5次/seed；重复目录会拒绝覆盖，中断恢复用新目录并保留旧证据。未走GPU分支可按源码解释，不补跑。
+
+4. 一条B1测量记录的 TTFT从哪里计时到哪里，包含什么、不包含什么？
+
+   **通过标准**：定位 W2 `d12_benchmark.py::measure` 与 Engine生成器首次 `next`，说明模型/tokenizer已加载、prompt ID已构造；首步包含缓存分配、batch1 prefill、复制和采样，CUDA每次yield后同步。引用真实 `timing_scope/ttft_ms`，不能把TTFT当纯prefill内核时间。
+
+5. 假设 B1、G4，TTFT=10ms、后续步为2/3/4ms，正确的步数、TPOT和端到端吞吐各是多少？
+
+   **通过标准**：注明教学假设，算出 `actual_decode_steps=4`、`decode_step_ms`长3、TPOT=3ms、elapsed=19ms、完整生成时4/0.019≈210.53 token/s；说明仅测恰好G次yield，关闭stream避免多做一次无用前向。再指出真实raw中对应字段，不能把假设数值称本次性能。
+
+6. 为什么 `generated_tokens` 不能总用 `actual_decode_steps` 代替，B1也可能不相等吗？
+
+   **通过标准**：定位 `counts/completed/forced/stop`，说明终止token、forced工具token和已结束行后续token不计为有效采样输出，any行终止会提前结束本次测量；引用真实 `per_row_generated_tokens/status`。没有异常实例时给标注假设的例子，不能虚构观测到工具调用。
+
+7. 一份raw的预热、正式、完整有效和失败各有多少条，进程退出码又是多少？
+
+   **通过标准**：选真实 `session_id/run_id`，按 `phase/status` 点数并核对实际G步、G−1时间和有效token；引用矩阵 `returncode`、子进程log或CPU即时退出码。解释0是运行完成，2表示存在early_stop，1是捕获异常等；外层matrix进程结束不自动证明所有case有效，`PROCESS_OK`也不替代原始行检查。
+
+8. CPU分支的随机模型和tokenizer是什么，测试结果各自覆盖到哪一步？
+
+   **通过标准**：定位 W2 `load/ContractTokenizer`，说明小随机权重和合成ID仅检查程序契约；引用已有 `tests/test_engine.py`、`tests/test_attention_fallback.py` 的真实passed/failed/skipped和退出码，可复用历史日志但标明日期/版本。未执行写PENDING，skip不算FA3通过，不能沿用教程历史数字冒充本次。
+
+9. 遇到 early_stop、OOM、加载错误或中断时，分别应该保留哪份证据？
+
+   **通过标准**：从实际 `error/status/phase/log/returncode` 定位发生阶段，不足以定位就写未知；说明模型加载可写 `setup_or_run` error，导入/参数解析失败可能只有log，不能要求所有失败都有raw。中断可能留下部分matrix/raw，不能勾全矩阵完成；不通过改EOS语义或删失败行制造成功。
+
+10. 今天哪些B1结果够资格进入后续统计，哪些还只能称CPU契约、样本不足或待测？
+
+    **通过标准**：逐case关联计划、raw、log、正式有效数及预热情况；真实GPU checkpoint基线需要至少5条完整正式行及同session成功预热，CPU/random另列。缺GPU保留 `PENDING_GPU`，有效不足或异常写真实影响；已存在原始日志可复用，不为完成问答追加长基准。
 
 ## 核对记录与完成标记
 

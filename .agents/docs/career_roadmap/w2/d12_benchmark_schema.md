@@ -144,16 +144,46 @@ python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --mo
 
 ## 今日自验证与交流问题
 
-自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 请按实际脚本说明 TTFT 的起止点及包含/排除的工作：tokenizer、模型加载、cache分配、prefill、复制、采样与同步分别在哪一侧？引用 `measure()` 的相关位置。
+1. **被测工作负载**：本周 mode、P/G/B、BOS、普通 fill ID 与 seed 分别是什么？B=4 是否表示四条独立用户请求？
 
-2. 给定 P=32/G=8/B=1 与预热3次/正式5次，哪些是本次固定协议？B=4时 prefill 的请求语义是什么，为什么 TPOT 不除以B、吞吐不能重复乘B？
+   **通过标准**：对照实际参数与 `measure()` 的 prompt 构造，说明一个 prompt 做 B=1 prefill 后复制到多行；fill ID 须合法且非特殊 token，记录 prompt_sha256，工作负载是固定 ID 而非真实问答。
 
-3. 若 G=1，TPOT 应是什么？若 CPU 没测显存，相关字段应是什么？结合字段表解释有效 token、elapsed 与吞吐的单位关系。
+2. **计时起止的完整清单**：TTFT 从哪条语句开始、到哪里结束？模型加载、哈希、分词、prompt 构造、cache 分配、prefill、复制、采样、设备同步各在哪一侧？
 
-4. 缺失模型命令实际退出码和错误行是什么？引用 `d12_schema_error.jsonl` 的 status/phase/error；它验证了什么，为什么不能算成功基线，argparse失败又有什么不同？
+   **通过标准**：逐项对应 load/main/measure 与 Engine 首次 next，说明 generator 创建不执行主体；带同步的首列延迟不能称为纯 attention kernel 时间。
 
-5. 后续如何按身份分组、排除预热与失败行并计算 P95？说明 reserved/allocated 的边界和未测条件；协议可在本聊天确认，哪些字段仍缺证据就明确标记。
+3. **输出步数与结束边界**：G=8 完整运行时有几次 yield、几个后续间隔？脚本为什么收满 G 列就 close，而不再 next 一次等待 StopIteration？
+
+   **通过标准**：按实际 for 循环和 Engine yield 后 forward 推导，区分 actual_decode_steps 的列数与 G−1 个 decode_step_ms；说明避免计入未产生 token 的额外 forward。
+
+4. **TPOT 与吞吐公式**：假设 B=4、G=4、TTFT=10ms、后续间隔=[2,3,4]ms，完整生成时 TPOT、elapsed 和 tokens/s 各是多少？
+
+   **通过标准**：注明假设，展示 TPOT=3ms、elapsed=19ms、有效 token=16 与 16/0.019 的单位换算；TPOT 不除以 B，吞吐分子已计 B 后不再乘 B，真实数据另引 raw。
+
+5. **有效输出的定义**：终止 token、工具 forced token、已完成行的后续列是否计有效 token？哪些条件必须同时满足 status 才为 ok？
+
+   **通过标准**：沿 counts/completed/forced 与 good 判断解释所有 B 行均有 G 个有效 token、实际 G 列且无 forced；区分 Engine 的结束逻辑与基准遇任一行终止即停止，异常行保留。
+
+6. **schema 的身份与角色**：选一条已有原始行，指出 schema_version/session_id/run_id、phase/repeat/status 及模型/输入身份字段；run_id 与 session_id 各解决什么问题？
+
+   **通过标准**：逐字段引用真实 JSONL，区分 warmup、measure 和 setup_or_run；缺实测可按脚本说明字段但标样例未执行，不手填一组性能数据冒充原始行。
+
+7. **边界值与内存范围**：G=1 时后续间隔和 TPOT 是什么？CPU 内存字段为什么是 null；GPU peak allocated/reserved 在何时重置、能否解释为纯 KV 或整卡占用？
+
+   **通过标准**：对照 measure 返回值，说明无后续样本时 TPOT=None，CPU未测不能写0；峰值重置在模型加载后，allocated仍含活跃模型，重复间 allocator保留可能影响reserved。
+
+8. **错误行与参数错误**：已有缺失模型检查的真实命令、退出码、phase/status/error 是什么？它与 --warmup 0 在 argparse 阶段失败有什么不同？
+
+   **通过标准**：引用 d12_schema_error.jsonl 或已有同类真实错误与日志；进入 try 后的异常可落错误行，参数校验在创建输出前失败不写 raw，错误落盘不算成功基线；仅阅读则标落盘 PENDING。
+
+9. **预热与统计对象**：预热至少3次、正式至少5次分别怎样保存和筛选？跨运行 TPOT 的 P95 与把所有 decode step 混在一起算 P95 有何不同？
+
+   **通过标准**：指向 main 的两阶段循环与 aggregate.metrics/p95，明确先每次求平均再跨正式有效运行统计，nearest-rank 方法与小样本限制；预热不进入正式统计。
+
+10. **冻结协议与未验项**：后续比较需固定哪些模型/词表哈希、输入、版本、环境、精度、后端和计时条件？本日哪些协议有证据、哪些仍缺？
+
+    **通过标准**：对应 common/env/checkpoint_sha256 等实际字段，说明 dirty 布尔不能恢复未提交 patch、需保留相关差异；协议可聊天确认，缺 GPU/checkpoint 不填性能基线。
 
 离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

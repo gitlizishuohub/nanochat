@@ -95,7 +95,7 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 该脚本用每个 split 的真实 loader 取一批 `[1,32]`；训练时 loader 默认 buffer_size 为 1000，教学检查用 4 降低等待。它读取 parquet 第一 row group，检查 `text` 列非空且元素为字符串，然后检查：
 
 1. `x/y` 形状 `[B,T]=[1,32]`、整数类型；
-2. `x[:,1:] == y[:,:-1]`，说明 labels 向右错位一个 token；
+2. `x[:,1:] == y[:,:-1]`：x 取原始行的前 T 项，y 取后移一个位置后的 T 项，同一列的目标是输入的下一 token；
 3. 每行输入以 BOS 起头，ID 都在词表范围；
 4. train 与 val 都能产出，不会卡在空 train split。
 
@@ -145,16 +145,46 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 
 ## 今日自验证与交流问题
 
-自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时再选用上表的可选 Markdown。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 六组往返样本中，选一个中文或 emoji 样本贴出文本和 token ID；为什么 token 数、字符数与字节数可能不同？引用 `d09_token_roundtrip.json` 的实际结果。
+1. 本次实际走已有数据还是合成分支？所用数据根、tokenizer 和 train/val 来源如何对应？
 
-2. 空字符串普通 encode 与加 BOS 有什么不同？BOS 的 ID 从哪里取得，为什么不能把带 BOS 的直接解码结果与原文比较？
+   **通过标准**：给出真实 `NANOCHAT_BASE_DIR` 及库存路径；合成分支引用 `d09_synthetic_provenance.json` 的 `kind`、`train_rows`、`val_rows`、`vocab_size`、`quality_claim`，已有数据引用来源记录，不能把示例路径或历史成功当成本次结果。
 
-3. 从 `d09_token_data_roundtrip.json` 解释 x/y 的形状与错位关系，再用6个 token 的短序列写出对应输入和目标；best-fit 为什么不等于无裁切拼接？
+2. 隔离准备脚本为什么要求全新目录？它使用哪部分数据训练 tokenizer，又怎样生成两份 parquet 与 token_bytes？
 
-4. 两个 split 是否都产生合法批次，特殊 ID 与 token_bytes 检查是否通过？附两条检查命令的退出码；若失败，指出第一个失败断言、缺包或缺文件。
+   **通过标准**：定位 `d09_prepare_toy.py:main`，说明目录存在即拒绝、各 1200 条的不同 train/val 模板、仅用 train 训练词表、两份含 text 列的文件及 row_group_size=128；普通 ID 用原始 token 字节长度、特殊 ID 写零，未走合成分支可按源码解释。
 
-5. 这次数据根与来源是什么？合成数据通过证明了哪些功能，还有哪些语言能力、真实数据或训练结果没有验证？
+3. 六类往返样本是否齐全？选中文或 emoji 的真实样本说明 token 数、字符数与 UTF-8 字节数为何不同。
+
+   **通过标准**：引用 `d09_token_roundtrip.json.status` 与六条 `cases` 的 `text`、`token_ids`、`passed`；列明英文、混合文本、换行空白、数字、emoji/重音、空串，给所选文本的实际 ID，解释 tokenizer 合并字节片段，单 token 不必是完整字符。
+
+4. 空字符串普通编码与显式添加 BOS 分别得到什么？为什么带 BOS 的解码不能直接与原文比较？
+
+   **通过标准**：结合空串 case 和 `tokenizer.py:encode/get_bos_token_id` 说明普通结果为空、加 BOS 后有一个起始 ID；ID 由 tokenizer 获取，不假设整数常量；解释脚本比较 `bos_ids[1:]` 的原因，实际 BOS ID 引 `special_tokens`。
+
+5. 批量编码、九个特殊 ID 与 token_bytes 的三个检查分别约束什么？检查通过仍不能证明哪些字节长度事实？
+
+   **通过标准**：定位 `d09_roundtrip.py` 的断言，说明批量与逐条一致、特殊 ID 不冲突、字节张量长度等于词表大小且特殊位置为零；引用 `vocab_size`、`special_tokens`、`token_bytes_shape`；指出脚本没有逐项重算普通 token 字节长度，不能扩张验收范围。
+
+6. 假设完整行是 `[BOS,11,12,13,14,15]`，T=5 时 x、y 各是什么？每个位置预测哪个目标？
+
+   **通过标准**：写出 x=`[BOS,11,12,13,14]`、y=`[11,12,13,14,15]`；据 `dataloader.py` 的 `row_buffer[:, :-1]`、`row_buffer[:, 1:]` 解释 y 取原行后移一个位置的序列，同列目标是下一 token，并验证 `x[:,1:]==y[:,:-1]`；注明这是概念算例。
+
+7. best-fit 在一行剩余 5 个位置、缓冲文档长度分别为 3、5、8 时选谁？没有文档能放下时怎样处理？
+
+   **通过标准**：依据 `dataloader.py` 的 `best_idx` 与 `shortest_idx` 分支，先选长度 5 的完整文档；若假设只剩 2 个位置而最短文档为 3，则截取最短文档前 2 个 token 并丢弃剩余部分；解释 T+1、BOS 对齐、无 padding 与无裁切的区别。
+
+8. 真实 loader 对 train 和 val 各检查了什么，结果文件实际保存了什么？
+
+   **通过标准**：引用 `d09_token_data_roundtrip.json` 中 `train_batch`、`val_batch` 的 `shape`、`first_ids`、`passed`；对照脚本说明检查 x/y=[1,32]、x 的 long 类型、错位、输入起点 BOS、两者 ID 范围；说明 JSON 不保存完整 x/y，也没有单独的 y dtype 字段，不能捏造输出。
+
+9. 数据检查读取了所有数据内容吗？只有一份 shard、缺 text、空文件或依赖失败时该怎样解释结果？
+
+   **通过标准**：说明先检查文件总行数及每份第一 row group 的 text 是否为字符串，再取两 split 的一批，不能代表全语料全量验证；引用实际 `error` 和退出码（成功 0、捕获异常 1），依赖/数据受阻范围写清，避免在空 train iterator 上无限等待。
+
+10. 今天哪些证据足以进入两步训练？合成数据全部断言成功是否意味着模型质量已验证？
+
+    **通过标准**：给出两条检查命令及对应 JSON 的真实 `status`、退出码，确认 `--check-data` 覆盖了两个 split；只把 tokenizer/批次契约计为通过，真实训练、收敛、语言能力仍未验证，缺检查则标 `PENDING` 并指出阻塞门槛。
 
 离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。

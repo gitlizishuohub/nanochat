@@ -140,16 +140,46 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --raw-dir experim
 
 ## 今日自验证与交流问题
 
-自行验证后，直接在聊天中逐题简答即可，不要求正式报告、排版或长文。每个结论引用相应日志、自动结果中的字段或源码位置；没有执行的检查明确标为 `PENDING`，遇到失败给出真实退出码与错误。需要本地留存时可自行整理 Markdown，不另设必交文件。
+可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
 
-1. 本次 raw 文件的 session_id、warmup/measure 行数及各 status 数量是什么？用完整文件路径定位；为什么总共8行仍不一定代表5次正式成功？
+1. **分支与实际运行**：今天跑了随机 CPU、训练 checkpoint CPU 或 GPU 中哪些分支？各自实际命令、数据根、输出路径和退出码是什么？
 
-2. 选一个 measure+ok 的 run_id，引用 TTFT、decode_step_ms、elapsed_ms 与 generated_tokens，复算 `elapsed≈TTFT+sum(intervals)` 和 `tokens/s=generated_tokens×1000/elapsed_ms`。
+   **通过标准**：区分未执行、成功、提前结束和捕获异常，引用 model_kind/device/evidence_scope 及日志；训练 checkpoint 另注明合成或真实语料来源，不由 source=base 推断来源。
 
-3. 随机模型、合成训练 checkpoint 与真实语料 checkpoint 这次各跑了哪些？引用模型身份字段；为什么随机 CPU 结果不能代替训练门槛或 GPU 加速证据？
+2. **模型与环境身份**：选一条正式行，模型 tag/step/hash、tokenizer hash、config、seed、precision、attention_backend、env 各能追到哪里？
 
-4. 从 `d13_w2_audit.jsonl` 追到本日 raw 路径与 run_id，再找到 CSV 对应组：哪些身份字段阻止合并，5个正式样本的 nearest-rank P95 是第几个值？
+   **通过标准**：对照脚本 load/main 的真实记录，随机夹具没有训练权重身份，CPU setdefault 不保证覆盖外部 dtype；跨 session 或身份变化不直接混并。
 
-5. 是否出现 early_stop/error、追加旧session或缺GPU/模型？指出保留的原始行与未验证分支，说明重选 prompt 或补测的理由，不能只报最快一次。
+3. **三次与五次的点数**：本次每个 session 实际有多少 warmup/measure，各 status 有多少？总数8行为什么不一定表示五次正式成功？
+
+   **通过标准**：按 phase/status 计数，列出每个正式 run_id 和完整性状态；区分 CLI 运行次数、输出步骤与正式重复，重复追加的旧 session 不能算成本次新样本。
+
+4. **抽一行复算**：取一个 measure+ok 行，给出 TTFT、decode_step_ms、elapsed_ms、generated_tokens 并手算 TPOT 和 tokens/s。
+
+   **通过标准**：提供文件行号和 run_id，验证 elapsed≈TTFT+sum(intervals)、TPOT为后续间隔均值、tokens/s=有效token×1000/elapsed_ms；没有有效行就说明阻塞，不用教学数值顶替。
+
+5. **长度与 token 完整性**：本次 actual_decode_steps、间隔长度、per_row_generated_tokens 与 G/B 满足什么关系，如何判断提前结束或 forced token 污染？
+
+   **通过标准**：引用真实行与 measure.good：G列、G−1间隔、B行每项G、总数为和；status=early_stop 不纳入固定长度性能，不据文件名假设真实形状。
+
+6. **退出码与错误保留**：退出0、2、1在该脚本中分别对应什么？若导入/加载或某次测量异常，本次原始行可能只有几条？
+
+   **通过标准**：对照 main 返回分支与首个真实错误；说明失败后可能提前返回，非零退出不应删行，8行只适用于循环完整执行，参数解析失败可能无raw。
+
+7. **共享目录与本日组**：统计入口实际扫描哪些文件，是否递归、是否只看 d13 前缀？本日两组与其它日期数据怎样区分？
+
+   **通过标准**：引用 glob、完整输入路径、session_id/run_id 与 audit，输出名 d13 不限制输入日期；计划矩阵不是测量，子目录要单独指定 raw-dir。
+
+8. **分组与样本追溯**：从一条 audit 的 file/line/run_id 找到 CSV 对应组；哪些字段让 P/G/B 相同的两个 session 仍分开？
+
+   **通过标准**：核对 KEYS、env/model_config、模型/词表/输入哈希和有效 run_ids；audit覆盖非warmup行，预热从raw核对，避免宣称所有原始行都有audit。
+
+9. **中位数与 P95**：从一组真实正式指标排序，核对 median/min/max/P95 和样本数；五个样本的 nearest-rank P95 取哪个位置？
+
+   **通过标准**：说明先每run计算指标再跨有效run汇总，N=5时P95为最大值，不是稳定尾延迟承诺；无有效组就标未能统计，不挑最快值代替。
+
+10. **异常与下一步**：本次是否有 early_stop/error、身份变化、缺 GPU/checkpoint 或不完整重复？换 fill ID、重跑新文件后还能与旧输入直接比较吗？
+
+    **通过标准**：保留实际失败行和理由，prompt_sha256变化作为独立工作负载，不挑最佳输入成绩；给出 CSV 的真实 conclusion_status 与 D14 放行范围，CPU/random 仅功能契约。
 
 离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。
