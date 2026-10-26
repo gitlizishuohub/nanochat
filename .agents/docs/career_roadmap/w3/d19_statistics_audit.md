@@ -123,47 +123,23 @@ python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
 
 ## 本日自验证与交流
 
-可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。
+按题号在聊天中回答即可，预计交流约 20–25 分钟，不要求另写报告。开头一次给出本次 raw、CSV、audit 的对应关系与日期/版本，之后用关键行和 run_id 支撑推导，不必重复环境与路径。未执行的实测项标 `PENDING`；没有真实 raw 时说明阻塞，假设题仍可回答；不得从待执行矩阵生成或填写性能结果，也不要求补跑 GPU。
 
-1. **输入选择与输出归属**：本次raw-dir、CSV、audit的完整路径是什么？扫描是否递归、匹配哪些文件名，为何matrix不能当raw？
+1. 两条记录的 P/G/B 相同就能一起算中位数吗？请从实际输入中找一对记录，判断它们是否属于同一个统计组。
 
-   **通过标准**：引用实际聚合命令与glob，不混不同attempt树；无匹配、只有预热或无测量组按真实报错说明，不用空表伪装完成，重复执行会重写summary/audit。
+   **核对要点**：依据聚合脚本组键解释决定性差异，特别注意 session、模型/词表身份、输入、实际后端和环境；不能只看文件名或形状。说明本次输入目录为何不会无意混进别的 attempt；缺少第二条可对照记录时可明确假设一个差异后推演。
 
-2. **分组身份与防混并**：取两个P/G/B相同的记录，哪些字段决定能否同组？session、权重/词表/输入hash、环境、config分别如何处理？
+2. 任选一个统计组，核对“总数 = 有效数 + 排除数”，并沿 audit 解释一条行记录为何纳入或排除。
 
-   **通过标准**：逐项对应KEYS及env/model_config，说明不同session不会自动合并；CSV run_ids追溯有效行，只有人工核查后才能考虑跨attempt对照，不盲目cat目录。
+   **核对要点**：把 CSV 的计数与有效 run_ids、audit 的文件/行号对应，说明预热另从 raw 核查，不进入该组正式行总数；`status=ok` 仍须满足内容完整性。若全为有效行就检查一条纳入原因，无需制造失败；坏 JSON 或重复 run_id 导致聚合中止时，不能声称已生成完整审计。
 
-3. **一行完整性检查**：选一个真实measure+ok，怎样核验上下文、G列、G−1间隔、B行有效数和总数、正有限时间及elapsed一致性？
+3. 选一个真实统计组，说明怎样从各 run 的 decode_step_ms 得到本组 TPOT 中位数与 P95。如果直接把所有 decode 间隔放在一起求中位数，还是同一个统计对象吗？
 
-   **通过标准**：引用metrics每条判断与原始字段，status=ok仍需内容验证；时间一致性按脚本允许的rel_tol/abs_tol核对，缺字段/未知schema进入invalid原因。
+   **核对要点**：复用 D13 已确认的单行复算和分位数规则，不必重抄逐步时间；列出该组每 run 的 TPOT 样本及组中位数/P95，与 CSV 对应。解释两个聚合层级的区别，数值偶合也不能证明定义相同；没有有效组时只做标明假设的推导。
 
-4. **逐 run 手工复算**：给出一个run_id的TTFT、decode_step_ms、generated_tokens、elapsed_ms，复算TPOT和tokens/s，与自动结果相差多少？
+4. 看实际的 `conclusion_status`，你同意当前组被称为 GPU 基线吗？如果是 GPU checkpoint、6 次正式行有效，但同 session 仅有 2 次成功预热，结论应如何变化？
 
-   **通过标准**：提供file/line/run_id、公式和单位；TPOT为后续步算术均值，端到端吞吐含TTFT，不把上游infer_bench的步内中间值/排除TTFT吞吐混入。
-
-5. **跨运行的统计顺序**：自动表怎样从每run指标得到median/min/max/P95？G=1时TPOT怎样保留，能否将所有step混成总体TPOT？
-
-   **通过标准**：对应metrics与聚合循环，解释先每run再跨run及None/空单元格；区别median(tokens/s)与总token/总时长，不将两种统计因数值接近而混写。
-
-6. **P95 的可手算定义**：对教学样本[9,1,5,2,3]ms计算median、nearest-rank P95、min/max；为什么不能把结果写成稳定的95%服务保障？
-
-   **通过标准**：注明假设，排序并按ceil(0.95N)定位，N=5时P95取最大值；同时对照真实组的n_valid，区分经验分位数、置信区间与线上保障。
-
-7. **排除行与 audit 范围**：找一条被排除的非warmup行，reason是什么；若没有排除行，选纳入行逐项解释。预热为什么不出现在audit和n_total中？
-
-   **通过标准**：对照audit的file/line/run_id/included/reason与warmup分支continue；预热另从raw检查，未知schema/early_stop/error不能静默消失，缺真实异常不必制造失败。
-
-8. **重复、损坏与样本账**：n_total、n_valid、n_excluded与有效run_ids怎样对应？重复run_id、缺run_id、坏JSON和只有warmup时脚本怎样处理？
-
-   **通过标准**：说明n_total为该组非warmup条目，重复ID在预热也检查；解析/身份错误可使聚合中止，不能保证仍产出audit，应保留原件和退出码，不能改run_id制造新样本。
-
-9. **分层状态与预热**：实际conclusion_status和warmup_status是什么？NO_VALID_SAMPLES、CPU_OR_RANDOM_CONTRACT、INSUFFICIENT_WARMUP、INSUFFICIENT_SAMPLES、GPU_BASELINE分别需什么条件？
-
-   **通过标准**：按脚本优先级判断：先有效样本，再设备/模型及预热/数量；同身份session至少3次status=ok且schema=1预热，GPU基线还需≥5有效正式行；预热仅按 status/schema 记账，没有执行 metrics() 对正式行的完整检查，GPU_BASELINE仍需人工核身份和负载。
-
-10. **内存、负载与结论范围**：表中allocated/reserved怎样从有效行汇总，CPU空单元格为什么不写0？哪些权重、背景负载、GPU路径仍缺人工核验？
-
-    **通过标准**：引用实际内存median/min/max或未测状态，区分分配器保留与活跃模型内存；只报告现有数据支持的结论，下一天复现入口引用真实通过命令和限制。
+   **核对要点**：结合设备/模型类型、有效正式数与预热条件作判断，并按脚本分支验证假设，不把 CPU/random 或样本不足写成正式 GPU 结果。即使结构门槛满足，也说清仍需人工核查的模型身份、背景负载和测量边界；状态标签本身不证明性能优化或模型能力提升。
 
 ## 核对记录与完成标记
 

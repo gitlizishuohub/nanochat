@@ -149,47 +149,23 @@ python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/resu
 
 ## 本日自验证与交流
 
-可直接在聊天中按题号回答，不要求手写报告。每题给出结论和可定位依据（源码位置、命令与退出码、日志片段或自动结果字段）；同一份证据可复用。概念推演须注明假设，实际运行须区分本次与历史结果。未执行写 `PENDING`，失败写真实错误和影响范围，不能据此勾选实验通过。GPU 未执行继续保留 `PENDING_GPU`，不要求为验收补跑大任务或填造 GPU CSV。
+按题号在聊天中回答即可，预计交流约 15–20 分钟，不要求另写报告。开头一次说明本次实际走 GPU checkpoint 还是 CPU 随机模型分支，并附日期/版本及一份可定位的日志/raw；之后只引用支撑判断的关键片段，不必重复环境、命令和路径。未执行写 `PENDING`，历史结果注明归属；GPU 待测保留 `PENDING_GPU`，不为答题增加长任务。
 
-1. 今天应走 GPU checkpoint 分支还是 CPU random 分支，判断来自哪些实际检查？
+1. 根据今天真实检查的结果，你有条件完成哪一级验证？哪一条前置证据决定了不能把它叫作更高一级的基线？
 
-   **通过标准**：引用 `d17_checks.log` 中解释器、torch版本、`cuda_available`、设备和命令退出码；GPU分支还需W2模型/tokenizer加载证据。import失败属于依赖阻塞，CPU随机夹具属于接口检查，均不能当真实GPU checkpoint基线。
+   **核对要点**：结合依赖可用性、设备、模型与 tokenizer 加载情况作判断，区分依赖阻塞、CPU/random 契约和真实 GPU checkpoint 测量。引用实际关键输出；不能因计划存在、CUDA 可用或脚本帮助能打开就声称模型基准通过。
 
-2. 六个 B1 候选中，今天实际执行了哪些，其他候选为什么没有执行？
+2. 抽一条实际正式运行，判断它是否完成了要求的固定长度工作量。假如 `status=ok`，你仍要核对哪些相互约束的数据？
 
-   **通过标准**：从矩阵 `case_id/sequence_len/status/execute` 恢复P32/128/512与G32/128的B1状态，区分非法上下文、尚待GPU、成功和失败；B4仍为未选中候选。只有CPU分支时引用原计划并保留GPU状态，不要求填GPU结果表。
+   **核对要点**：用该行的 G、实际输出列数、后续间隔数、每行有效 token 和总数逐项交叉核查；检查时间为正且有限。能解释终止/forced token 为何可能使列数与有效输出不同；没有真实行时可推演字段关系，实际结果继续待验。
 
-3. GPU执行命令怎样确保复用昨天冻结的模型和协议，恢复时为什么要新建attempt目录？
+3. 不看进程的成功提示，只依据一个 session 的原始行，今天有多少次预热、多少次正式运行、多少次完整有效？这些证据允许它进入什么类型的后续统计？
 
-   **通过标准**：定位实际命令中的 `--source/--model-tag/--step/--batch 1/--device cuda/--execute/--artifact-day 17` 及缓存根目录，核对矩阵 `command` 的预热3次/正式至少5次/seed；重复目录会拒绝覆盖，中断恢复用新目录并保留旧证据。未走GPU分支可按源码解释，不补跑。
+   **核对要点**：从 `phase/status` 与第 2 题的完整性条件核数，保留失败和不足样本。说明预热与正式样本的用途，核对至少 3 次成功预热及至少 5 次有效正式运行的门槛；CPU/random 即使满足次数仍属于契约验证。`PROCESS_OK` 不能替代这份判断。
 
-4. 一条B1测量记录的 TTFT从哪里计时到哪里，包含什么、不包含什么？
+4. 选今天一处真实失败或可疑结果，说明你会如何定位并恢复。若未遇到失败，请推演“只看到非零退出码、没有 raw”的情况。
 
-   **通过标准**：定位 W2 `d12_benchmark.py::measure` 与 Engine生成器首次 `next`，说明模型/tokenizer已加载、prompt ID已构造；首步包含缓存分配、batch1 prefill、复制和采样，CUDA每次yield后同步。引用真实 `timing_scope/ttft_ms`，不能把TTFT当纯prefill内核时间。
-
-5. 假设 B1、G4，TTFT=10ms、后续步为2/3/4ms，正确的步数、TPOT和端到端吞吐各是多少？
-
-   **通过标准**：注明教学假设，算出 `actual_decode_steps=4`、`decode_step_ms`长3、TPOT=3ms、elapsed=19ms、完整生成时4/0.019≈210.53 token/s；说明仅测恰好G次yield，关闭stream避免多做一次无用前向。再指出真实raw中对应字段，不能把假设数值称本次性能。
-
-6. 为什么 `generated_tokens` 不能总用 `actual_decode_steps` 代替，B1也可能不相等吗？
-
-   **通过标准**：定位 `counts/completed/forced/stop`，说明终止token、forced工具token和已结束行后续token不计为有效采样输出，any行终止会提前结束本次测量；引用真实 `per_row_generated_tokens/status`。没有异常实例时给标注假设的例子，不能虚构观测到工具调用。
-
-7. 一份raw的预热、正式、完整有效和失败各有多少条，进程退出码又是多少？
-
-   **通过标准**：选真实 `session_id/run_id`，按 `phase/status` 点数并核对实际G步、G−1时间和有效token；引用矩阵 `returncode`、子进程log或CPU即时退出码。解释0是运行完成，2表示存在early_stop，1是捕获异常等；外层matrix进程结束不自动证明所有case有效，`PROCESS_OK`也不替代原始行检查。
-
-8. CPU分支的随机模型和tokenizer是什么，测试结果各自覆盖到哪一步？
-
-   **通过标准**：定位 W2 `load/ContractTokenizer`，说明小随机权重和合成ID仅检查程序契约；引用已有 `tests/test_engine.py`、`tests/test_attention_fallback.py` 的真实passed/failed/skipped和退出码，可复用历史日志但标明日期/版本。未执行写PENDING，skip不算FA3通过，不能沿用教程历史数字冒充本次。
-
-9. 遇到 early_stop、OOM、加载错误或中断时，分别应该保留哪份证据？
-
-   **通过标准**：从实际 `error/status/phase/log/returncode` 定位发生阶段，不足以定位就写未知；说明模型加载可写 `setup_or_run` error，导入/参数解析失败可能只有log，不能要求所有失败都有raw。中断可能留下部分matrix/raw，不能勾全矩阵完成；不通过改EOS语义或删失败行制造成功。
-
-10. 今天哪些B1结果够资格进入后续统计，哪些还只能称CPU契约、样本不足或待测？
-
-    **通过标准**：逐case关联计划、raw、log、正式有效数及预热情况；真实GPU checkpoint基线需要至少5条完整正式行及同session成功预热，CPU/random另列。缺GPU保留 `PENDING_GPU`，有效不足或异常写真实影响；已存在原始日志可复用，不为完成问答追加长基准。
+   **核对要点**：先区分解释器/导入/参数解析、模型加载和生成阶段，再说明查哪段 case log 或原始错误行；证据不足就标未知。恢复保留旧文件并用新 attempt，说明下一次最小检查；不通过删失败行、改 EOS 规则或换模型沿用原名制造成功，也不要求故意注入故障。
 
 ## 核对记录与完成标记
 
