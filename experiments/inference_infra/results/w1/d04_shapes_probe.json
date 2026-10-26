@@ -1,0 +1,102 @@
+{
+  "purpose": "CPU random-weight functional probe; no quality/performance claim",
+  "mode": "shapes",
+  "config": {
+    "sequence_len": 64,
+    "vocab_size": 128,
+    "n_layer": 2,
+    "n_head": 4,
+    "n_kv_head": 2,
+    "n_embd": 64,
+    "window_pattern": "L"
+  },
+  "seed": 42,
+  "torch": "2.9.1+cpu",
+  "USE_FA3": false,
+  "shapes": [
+    {
+      "module": "transformer.wte",
+      "input": [
+        1,
+        8
+      ],
+      "output": [
+        1,
+        8,
+        64
+      ]
+    },
+    {
+      "module": "transformer.h.0.attn.c_q",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        64
+      ]
+    },
+    {
+      "module": "transformer.h.0.attn.c_k",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "module": "transformer.h.0.attn.c_v",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "module": "transformer.h.0",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        64
+      ]
+    },
+    {
+      "module": "lm_head",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        128
+      ]
+    }
+  ],
+  "steps": [],
+  "logits_shape": [
+    1,
+    8,
+    128
+  ],
+  "logits_dtype": "torch.float32"
+}
