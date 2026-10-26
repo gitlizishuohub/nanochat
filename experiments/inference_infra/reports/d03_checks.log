@@ -1,0 +1,243 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'torch'
+/home/lizishuo/miniconda3/envs/nanochat/bin/python
+2.9.1+cpu
+8.4.2
+]633;E;python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --help;d6dfa1a7-4f2f-4872-badc-c5aa7539b356]633;Cusage: d03_run_inference_tests.py [-h] [--output-dir OUTPUT_DIR]
+                                  [--select SELECT]
+
+Capture pytest stdout, stderr, exact argv and exit code using the current
+Python.
+
+options:
+  -h, --help            show this help message and exit
+  --output-dir OUTPUT_DIR
+  --select SELECT       Optional pytest -k expression, for a targeted rerun
+{
+  "argv": [
+    "/home/lizishuo/miniconda3/envs/nanochat/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_engine.py",
+    "tests/test_attention_fallback.py",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "cwd": "/home/lizishuo/_program_/Project/nanochat",
+  "exit_code": 0,
+  "elapsed_seconds": 7.7751074970001355,
+  "NANOCHAT_DTYPE": "float32",
+  "CUDA_VISIBLE_DEVICES": "",
+  "status": "PASS"
+}
+Logs: /home/lizishuo/_program_/Project/nanochat/experiments/inference_infra/results/w1/d03_pytest/20261022T112433868825Z
+........sssssssss...s..                                                  [100%]
+13 passed, 10 skipped in 5.74s
+
+]633;E;rg -n '^def test_|^class Test|def test_' tests/test_engine.py tests/test_attention_fallback.py;d6dfa1a7-4f2f-4872-badc-c5aa7539b356]633;Ctests/test_engine.py:84:def test_kv_cache_basic():
+tests/test_engine.py:124:def test_kv_cache_prefill():
+tests/test_engine.py:158:def test_multi_sample_first_token_diversity():
+tests/test_engine.py:201:def test_seed_reproducibility():
+tests/test_engine.py:214:def test_temperature_zero_determinism():
+tests/test_engine.py:226:def test_max_tokens_respected():
+tests/test_engine.py:238:def test_num_samples_count():
+tests/test_engine.py:249:def test_different_seeds_introduce_variation_when_temperature_nonzero():
+tests/test_attention_fallback.py:52:class TestFA3VsSDPA:
+tests/test_attention_fallback.py:58:    def test_basic_causal(self):
+tests/test_attention_fallback.py:72:    def test_full_context(self):
+tests/test_attention_fallback.py:86:    def test_sliding_window(self):
+tests/test_attention_fallback.py:101:    def test_gqa(self):
+tests/test_attention_fallback.py:118:    def test_larger_model(self):
+tests/test_attention_fallback.py:132:    def test_kvcache_prefill(self):
+tests/test_attention_fallback.py:155:    def test_kvcache_single_token(self):
+tests/test_attention_fallback.py:182:    def test_kvcache_single_token_sliding_window(self):
+tests/test_attention_fallback.py:215:    def test_backward_gradients_match(self):
+tests/test_attention_fallback.py:254:class TestSDPAOnly:
+tests/test_attention_fallback.py:260:    def test_basic_forward(self):
+tests/test_attention_fallback.py:274:    def test_backward(self):
+tests/test_attention_fallback.py:292:    def test_kvcache(self):
+tests/test_attention_fallback.py:340:class TestOverrideMechanism:
+tests/test_attention_fallback.py:344:    def test_override_fa3(self):
+tests/test_attention_fallback.py:350:    def test_override_sdpa(self):
+tests/test_attention_fallback.py:356:    def test_override_auto(self):
+@dataclass
+class MockConfig:
+    """Minimal config for Engine tests."""
+    n_kv_head: int = 4
+    n_head: int = 4
+    n_embd: int = 64
+    n_layer: int = 2
+    sequence_len: int = 128
+
+
+class MockModel:
+    """
+    Mock model that returns uniform logits over the vocab.
+    This ensures that with temperature > 0, different samples should
+    (with very high probability) produce different tokens.
+    """
+    def __init__(self, vocab_size=262):  # 256 bytes + 6 special tokens
+        self.vocab_size = vocab_size
+        self.config = MockConfig()
+        self._device = torch.device("cpu")
+
+    def get_device(self):
+        return self._device
+
+    def forward(self, ids, kv_cache=None):
+        """Return uniform logits so sampling is spread across vocab."""
+        B, T = ids.shape
+        # With FA3, flash_attn_with_kvcache updates cache in-place and we advance position
+        if kv_cache is not None:
+            kv_cache.advance(T)
+        # Uniform logits -> equal probability for all tokens
+        logits = torch.zeros(B, T, self.vocab_size)
+        return logits
+
+
+class ByteTokenizer:
+    """
+    Simple byte-level tokenizer for testing.
+    Tokens 0-255 are raw bytes, 256+ are special tokens.
+    """
+    def __init__(self):
+        # Special tokens start at 256
+        self._special_tokens = {
+            "<|python_start|>": 256,
+            "<|python_end|>": 257,
+            "<|output_start|>": 258,
+            "<|output_end|>": 259,
+            "<|assistant_end|>": 260,
+            "<|bos|>": 261,
+        }
+        self._bos = 261
+
+    def encode_special(self, s):
+        return self._special_tokens[s]
+
+    def get_bos_token_id(self):
+        return self._bos
+
+    def encode(self, s, prepend=None):
+        tokens = list(s.encode("utf-8"))  # bytes 0-255
+        if prepend is not None:
+            tokens = [prepend] + tokens
+        return tokens
+
+    def decode(self, tokens):
+        # Filter out special tokens before decoding
+        byte_tokens = [t for t in tokens if t < 256]
+        return bytes(byte_tokens).decode("utf-8", errors="replace")
+
+def test_kv_cache_basic():
+    """Test basic KVCache functionality for FA3."""
+    batch_size = 2
+    num_heads = 3
+    seq_len = 64
+    head_dim = 5
+    num_layers = 6
+
+    kv_cache = KVCache(
+        batch_size=batch_size,
+        num_heads=num_heads,
+        seq_len=seq_len,
+        head_dim=head_dim,
+        num_layers=num_layers,
+        device="cpu",
+        dtype=torch.float32,
+    )
+
+    # Check initial state
+    assert kv_cache.get_pos() == 0
+    assert kv_cache.k_cache.shape == (num_layers, batch_size, seq_len, num_heads, head_dim)
+    assert kv_cache.v_cache.shape == (num_layers, batch_size, seq_len, num_heads, head_dim)
+
+    # Test advance
+    kv_cache.advance(10)
+    assert kv_cache.get_pos() == 10
+
+    kv_cache.advance(5)
+    assert kv_cache.get_pos() == 15
+
+    # Test reset
+    kv_cache.reset()
+    assert kv_cache.get_pos() == 0
+
+    # Test get_layer_cache returns correct views
+    k_layer0, v_layer0 = kv_cache.get_layer_cache(0)
+    assert k_layer0.shape == (batch_size, seq_len, num_heads, head_dim)
+    assert v_layer0.shape == (batch_size, seq_len, num_heads, head_dim)
+
+
+def test_kv_cache_prefill():
+    """Test KVCache.prefill() copies data correctly."""
+    batch_size = 1
+    num_heads = 4
+    head_dim = 8
+    num_layers = 2
+
+19:from nanochat.flash_attention import flash_attn, HAS_FA3
+51:@pytest.mark.skipif(not HAS_FA3, reason="FA3 required to compare implementations")
+55:    DEVICE = "cuda"
+56:    DTYPE = torch.bfloat16
+61:        q = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+62:        k = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+63:        v = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+75:        q = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+76:        k = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+77:        v = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+90:        q = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+91:        k = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+92:        v = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+107:        q = torch.randn(B, T, n_heads, D, device=self.DEVICE, dtype=self.DTYPE)
+108:        k = torch.randn(B, T, n_kv_heads, D, device=self.DEVICE, dtype=self.DTYPE)
+109:        v = torch.randn(B, T, n_kv_heads, D, device=self.DEVICE, dtype=self.DTYPE)
+121:        q = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+122:        k = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+123:        v = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+137:        q = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+138:        k = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+139:        v = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+142:            k_cache = torch.zeros(B, T_max, H, D, device=self.DEVICE, dtype=self.DTYPE)
+143:            v_cache = torch.zeros(B, T_max, H, D, device=self.DEVICE, dtype=self.DTYPE)
+144:            cache_seqlens = torch.zeros(B, dtype=torch.int32, device=self.DEVICE)
+160:        k_init = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+161:        v_init = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+162:        q_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+163:        k_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+164:        v_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+167:            k_cache = torch.zeros(B, T_max, H, D, device=self.DEVICE, dtype=self.DTYPE)
+168:            v_cache = torch.zeros(B, T_max, H, D, device=self.DEVICE, dtype=self.DTYPE)
+171:            cache_seqlens = torch.full((B,), T_prefill, dtype=torch.int32, device=self.DEVICE)
+193:        k_init = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+194:        v_init = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+195:        q_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+196:        k_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+197:        v_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+200:            k_cache = torch.zeros(B, T_max, H, D, device=self.DEVICE, dtype=self.DTYPE)
+201:            v_cache = torch.zeros(B, T_max, H, D, device=self.DEVICE, dtype=self.DTYPE)
+204:            cache_seqlens = torch.full((B,), T_prefill, dtype=torch.int32, device=self.DEVICE)
+219:        q_data = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+220:        k_data = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+221:        v_data = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+257:    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+258:    DTYPE = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+264:        q = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+265:        k = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+266:        v = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE)
+278:        q = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE, requires_grad=True)
+279:        k = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE, requires_grad=True)
+280:        v = torch.randn(B, T, H, D, device=self.DEVICE, dtype=self.DTYPE, requires_grad=True)
+300:            num_layers=n_layers, device=self.DEVICE, dtype=self.DTYPE
+306:        q = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+307:        k = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+308:        v = torch.randn(B, T_prefill, H, D, device=self.DEVICE, dtype=self.DTYPE)
+321:        q_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+322:        k_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+323:        v_single = torch.randn(B, 1, H, D, device=self.DEVICE, dtype=self.DTYPE)
+343:    @pytest.mark.skipif(not HAS_FA3, reason="FA3 required")
+356:    def test_override_auto(self):
+359:        assert fa_module.USE_FA3 == HAS_FA3
+369:    print(f"HAS_FA3: {HAS_FA3}")

@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "/home/lizishuo/miniconda3/envs/nanochat/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_engine.py",
+    "tests/test_attention_fallback.py",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "cwd": "/home/lizishuo/_program_/Project/nanochat",
+  "exit_code": 0,
+  "elapsed_seconds": 7.7751074970001355,
+  "NANOCHAT_DTYPE": "float32",
+  "CUDA_VISIBLE_DEVICES": "",
+  "status": "PASS"
+}
