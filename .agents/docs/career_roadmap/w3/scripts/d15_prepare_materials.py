@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Create honest, editable application/reproduction templates; inspect evidence locally."""
+
 import argparse
 import hashlib
 import json
 from pathlib import Path
 
 TEMPLATES = {
-'d15_resume_draft.md': '''# [姓名]｜[邮箱]｜[代码主页]
+    "d15_resume_draft.md": """# [姓名]｜[邮箱]｜[代码主页]
 
 教育：[学校、专业、学历、毕业时间，逐项核实]。
 相关课程：[仅列确实修过且能回答问题的课程]。
@@ -26,8 +27,8 @@ TEMPLATES = {
 ## 技能与补充
 
 [只写可演示的 Python/PyTorch/Linux/Git 等能力及证据，控制全文一页]。
-''',
-'d20_reproduction_entry.md': '''# nanochat 推理基线：当前复现入口草稿
+""",
+    "d20_reproduction_entry.md": """# nanochat 推理基线：当前复现入口草稿
 
 ## 目的
 
@@ -59,8 +60,8 @@ GPU 基线：[真实 raw 路径或 PENDING_GPU]。
 缺数据/tokenizer/checkpoint：[返回 W2 对应日]。
 OOM：[记录失败，创建新的较小 B 实验；保留失败目录]。
 依赖缺失：[记录解释器和模块；不能把跳过当通过]。
-''',
-'d21_project_briefing.md': '''# 三分钟项目介绍草稿
+""",
+    "d21_project_briefing.md": """# 三分钟项目介绍草稿
 
 ## 0:00–0:30 问题与角色
 
@@ -84,43 +85,61 @@ MiniMind 归档证明：[数据/训练/恢复/KV 的具体证据]。边界：CPU
 ## 证据图（手动把每条替换为实际产物）
 
 MiniMind 数据契约 → 训练恢复 → KV 一致性 → nanochat checkpoint → raw JSONL → 自动统计 → trace/优化（待做）。
-'''}
+""",
+}
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--output-dir', required=True, type=Path)
-    p.add_argument('--kind', choices=['resume', 'entry', 'briefing', 'all'], default='all')
-    p.add_argument('--evidence', action='append', type=Path, default=[])
+    p.add_argument("--output-dir", required=True, type=Path)
+    p.add_argument(
+        "--kind", choices=["resume", "entry", "briefing", "all"], default="all"
+    )
+    p.add_argument("--evidence", action="append", type=Path, default=[])
     args = p.parse_args()
-    selected = {'resume': ['d15_resume_draft.md'], 'entry': ['d20_reproduction_entry.md'], 'briefing': ['d21_project_briefing.md'], 'all': list(TEMPLATES)}[args.kind]
+    selected = {
+        "resume": ["d15_resume_draft.md"],
+        "entry": ["d20_reproduction_entry.md"],
+        "briefing": ["d21_project_briefing.md"],
+        "all": list(TEMPLATES),
+    }[args.kind]
     targets = [args.output_dir / name for name in selected]
-    kinds_by_day = {'d15': 'resume', 'd20': 'entry', 'd21': 'briefing'}
-    manifests = [args.output_dir / f'{name[:3]}_{kinds_by_day[name[:3]]}_evidence_inventory.json'
-                 for name in selected]
+    kinds_by_day = {"d15": "resume", "d20": "entry", "d21": "briefing"}
+    manifests = [
+        args.output_dir / f"{name[:3]}_{kinds_by_day[name[:3]]}_evidence_inventory.json"
+        for name in selected
+    ]
     if any(path.exists() for path in [*targets, *manifests]):
-        p.error('Target exists: use a new output-dir; refusing to overwrite your edited materials')
+        p.error(
+            "Target exists: use a new output-dir; refusing to overwrite your edited materials"
+        )
     inventory = []
     for path in args.evidence:
-        entry = {'path': str(path.resolve()), 'exists': path.is_file()}
+        entry = {"path": str(path.resolve()), "exists": path.is_file()}
         if path.is_file():
             digest = hashlib.sha256()
-            with path.open('rb') as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b''):
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(block)
-            entry.update(bytes=path.stat().st_size, sha256=digest.hexdigest(),
-                         verification='FILE_PRESENT_ONLY; human must check claims and authorship')
+            entry.update(
+                bytes=path.stat().st_size,
+                sha256=digest.hexdigest(),
+                verification="FILE_PRESENT_ONLY; human must check claims and authorship",
+            )
         inventory.append(entry)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for path in targets:
-        path.write_text(TEMPLATES[path.name], encoding='utf-8')
+        path.write_text(TEMPLATES[path.name], encoding="utf-8")
         print(path)
     for target, manifest in zip(targets, manifests):
-        payload = {'first_use_day': int(target.name[1:3]),
-                   'material': target.name, 'evidence': inventory}
-        manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
+        payload = {
+            "first_use_day": int(target.name[1:3]),
+            "material": target.name,
+            "evidence": inventory,
+        }
+        manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
         print(manifest)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
