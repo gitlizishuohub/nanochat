@@ -1,0 +1,185 @@
+{
+  "purpose": "CPU random-weight functional probe; no quality/performance claim",
+  "mode": "cache",
+  "config": {
+    "sequence_len": 64,
+    "vocab_size": 128,
+    "n_layer": 2,
+    "n_head": 4,
+    "n_kv_head": 2,
+    "n_embd": 64,
+    "window_pattern": "L"
+  },
+  "seed": 42,
+  "torch": "2.9.1+cpu",
+  "USE_FA3": false,
+  "shapes": [
+    {
+      "module": "transformer.wte",
+      "input": [
+        1,
+        8
+      ],
+      "output": [
+        1,
+        8,
+        64
+      ]
+    },
+    {
+      "module": "transformer.h.0.attn.c_q",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        64
+      ]
+    },
+    {
+      "module": "transformer.h.0.attn.c_k",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "module": "transformer.h.0.attn.c_v",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "module": "transformer.h.0",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        64
+      ]
+    },
+    {
+      "module": "lm_head",
+      "input": [
+        1,
+        8,
+        64
+      ],
+      "output": [
+        1,
+        8,
+        128
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step": 0,
+      "input_tokens": 8,
+      "cache_before": 0,
+      "cache_after": 8,
+      "cache_seqlens": [
+        8
+      ],
+      "prev_embedding_shape": [
+        1,
+        1,
+        64
+      ],
+      "max_abs_logit_diff": 0.0,
+      "greedy_token": 23
+    },
+    {
+      "step": 1,
+      "input_tokens": 1,
+      "cache_before": 8,
+      "cache_after": 9,
+      "cache_seqlens": [
+        9
+      ],
+      "prev_embedding_shape": [
+        1,
+        1,
+        64
+      ],
+      "max_abs_logit_diff": 3.725290298461914e-09,
+      "greedy_token": 67
+    },
+    {
+      "step": 2,
+      "input_tokens": 1,
+      "cache_before": 9,
+      "cache_after": 10,
+      "cache_seqlens": [
+        10
+      ],
+      "prev_embedding_shape": [
+        1,
+        1,
+        64
+      ],
+      "max_abs_logit_diff": 7.450580596923828e-09,
+      "greedy_token": 118
+    },
+    {
+      "step": 3,
+      "input_tokens": 1,
+      "cache_before": 10,
+      "cache_after": 11,
+      "cache_seqlens": [
+        11
+      ],
+      "prev_embedding_shape": [
+        1,
+        1,
+        64
+      ],
+      "max_abs_logit_diff": 7.450580596923828e-09,
+      "greedy_token": 20
+    }
+  ],
+  "logits_shape": [
+    1,
+    8,
+    128
+  ],
+  "logits_dtype": "torch.float32",
+  "k_cache_shape": [
+    2,
+    4,
+    64,
+    2,
+    16
+  ],
+  "v_cache_shape": [
+    2,
+    4,
+    64,
+    2,
+    16
+  ],
+  "replication_batch": 4,
+  "replication_position": 11,
+  "storage_bytes_kv": 131072,
+  "reset_verified": true
+}
