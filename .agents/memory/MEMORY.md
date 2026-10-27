@@ -6,7 +6,7 @@
 
 ## feedback
 
-- [career-roadmap-guides](career-roadmap-guides.md) — W1/W2 带读改写与验证；区分推演/CPU操作/训练，GPU与权重扩展不作欠账，W3待完善。
+- [career-roadmap-guides](career-roadmap-guides.md) — W1–W3 带读改写完成；CPU主线、证据边界与D20复现脚本，训练/GPU扩展不作欠账。
 - [docs-diagrams](docs-diagrams.md) — 文档图示先核对技能要求，同时检查连接线、箭头对比度和布局。
 
 ## project

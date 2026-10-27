@@ -10,7 +10,7 @@ updated: 2026-10-27
 
 教学有效性反馈（2026-10-27）：用户阅读 `w1/d07_benchmark_audit.md` 后质疑每日指导只能告诉自己去哪里读源码，不能指导学习项目。完整阅读 D7 并对照 D4，确认已有概念说明、结论表和验收问题，但 D7 从源码执行过程逐步推导结论的教学支撑不足。后续维护应检查概念铺垫、具体例子、源码执行追踪及结果解释是否足以支撑题目，不能把定位命令、运行日志和验收题齐全当作学习指导充分。
 
-D7 示范改写：用户随后明确“可以先改d07”，已按概念铺垫→三个 token 推演→先预测后运行标准库生成器追踪→真实源码带读→计时/统计推导→变式验收重写；操作清单移到末尾。新增 `w1/scripts/d07_trace_generator.py`，仅模拟控制流，不执行 nanochat 或计时。Conda nanochat 中 G=1/3 追踪、非法参数非零退出已验证；Markdown 解析、本地链接/锚点、Bash 语法、术语标签和数值例子检查通过，并完成独立只读源码复核。全局预览配置检查为 already-prepared；未实测阅读器展示、学习效果、真实模型或 GPU 性能。W1、W2 后续完善见下文；W3 尚未按本模式改写。
+D7 示范改写：用户随后明确“可以先改d07”，已按概念铺垫→三个 token 推演→先预测后运行标准库生成器追踪→真实源码带读→计时/统计推导→变式验收重写；操作清单移到末尾。新增 `w1/scripts/d07_trace_generator.py`，仅模拟控制流，不执行 nanochat 或计时。Conda nanochat 中 G=1/3 追踪、非法参数非零退出已验证；Markdown 解析、本地链接/锚点、Bash 语法、术语标签和数值例子检查通过，并完成独立只读源码复核。全局预览配置检查为 already-prepared；未实测阅读器展示、学习效果、真实模型或 GPU 性能。W1–W3 后续完善见下文。
 
 资源与动作边界（2026-10-27 用户追问）：用户先后问“你默认我有GPU训练了？”与“这一步的意思是让我训练？”。不能从已安装 CPU 环境推断有 GPU、已训练或持有 checkpoint；“先走完一次生成”容易被读成执行要求。教程应在概念推演前说明无需操作，在实际操作前说明是否训练、读写什么、需要哪些资源。生成使用参数预测，训练会反向传播并更新参数，初始化随机权重也不等于训练。用户没有禁止学习或选择 CPU 短训练；本轮采用 CPU 学习主线，训练/既有权重/GPU 扩展按明确条件自选，未选择的扩展不记为每日欠账。避免“停一下、先不用背”等不帮助理解的提示语。
 
@@ -21,6 +21,10 @@ W1 本轮验证：七篇 Markdown、100 个本地链接/锚点、13 个 Bash 块
 W2 带读改写：用户明确“开7个子代理完善w2”，本轮七个子代理各负责 D08–D14 一篇，工具并发上限内分批执行；主代理逐篇回读、核对衔接并独立提交。七篇均补充具体例子、源码片段解释、结果解读与适量变式题。D09 明确小型 BPE 词表学习不是 GPT 训练；D10 区分只读/生成计划/自选 CPU 两步训练；D11 取消强制二十步训练，已有权重时复用 D10 step 2；D12–D14 无权重主线用 CPU random，既有 checkpoint 示例显式传 d10_w2_smoke/step 2，不依赖脚本默认标签。配套脚本本轮未修改。
 
 W2 验证范围：七篇 Markdown 解析、86 个本地链接/锚点、26 个 Bash 块语法、59 个原生术语标签与 diff 检查通过，保留流程栏目入站锚点。临时目录实测缺资源盘点退出 2、无 tokenizer 检查退出 1、plan-only 退出 0/PENDING 且没有训练日志；CPU 随机模型 P8/G4/B1、P8/G4/B4、P8/G3/B2 各 3 次预热加 5 次正式均 ok，核对有效计数和时间关系；前两组经 aggregate 得两组 CSV 与十条正式 audit。缺 checkpoint 的 setup 错误退出 1 并写错误行。以上验证不代表用户已运行教程；本轮未执行 BPE 准备、GPT 训练、真实 checkpoint 加载、GPU 实验或阅读器/学习效果验收。全局预览配置检查为 already-prepared。
+
+W3 带读改写：用户要求“继续w3”；原拟三组并行，子代理因用量限制未交付，主代理接手完成 D15–D21。D15 从本人动作/方法/范围教贡献改写，MiniMind 可选；D16 用无资产纸面矩阵与缓存算例学习比较设计，真实 meta 计划单列可选；D17/D18 以 CPU 随机小模型 P8/G4、B1/B4 核查 raw 与批量语义，允许复用 W2 合格记录；D19 教单 run 到组统计、审计反查及标签局限；D20 分开新测与已有 raw 重建；D21 用机制例子和证据组织口述。七篇均四道交流题，保留流程阅读入口，不把未选 GPU/训练记为欠账。
+
+W3 配套与验证：更新 `w3/scripts/d15_prepare_materials.py` 的三类模板，新增 `d20_reproduce_cpu.py`，正文不堆长流程。新脚本 measure 固定 CPU float32/线程环境/P8/G4/B1与B4，rebuild 仅标准库聚合；拒绝已有输出，登记 argv/退出码/日志，benchmark 失败停止后续步骤。七篇共 63 个本地链接、14 个 Bash 块、22 个术语标签检查通过，W1–W3 全 21 篇联检通过。临时目录实际运行新脚本 measure/rebuild，两组各三次预热/五次有效正式、十条 audit 可反查；合成异常验证失败传播、重复 ID 拒绝、计数不完整行排除，以及 CPU_OR_RANDOM_CONTRACT 标签不保证样本充分。矩阵工具使用明确合成配置验证 128/160/256 上下文合法格为 2/6/8，未启动基准，不能作为 checkpoint 证据。模板存在/缺失指纹和拒绝覆盖已验证。D21 图保留对比样式，仅核对扁平结构/无文字箭头；未验收阅读器或学习效果，未训练、下载、加载真实 checkpoint 或跑 GPU。
 
 用户决定：将 `.agents/docs/career_roadmap/nanochat_daily_execution_2026-10-01.md` 的 W1–W3 展开为三个周目录内的详细每日指导；每周实验脚本放在该周 `scripts/`。不增加周 README，指导正文在实际操作位置直接用相对链接指向脚本，并说明运行方式、结果解释和验收。
 
@@ -42,7 +46,7 @@ W2 验证范围：七篇 Markdown 解析、86 个本地链接/锚点、26 个 Ba
 
 已验证环境：`/home/lizishuo/miniconda3/envs/nanochat/bin/python` 为 Python 3.10.20，PyTorch 2.9.1+cpu；CPU FP32 / SDPA，无 CUDA。2026-10-15 推理相关测试 13 passed / 10 skipped，依赖兼容性检查通过。安装及复查命令见 `.agents/docs/project-maintenance/nanochat-conda-environment-2026-10-15.md`。这些结果不代表真实 checkpoint、训练或 GPU 性能已经验收。
 
-已完成交付：`w1/`、`w2/`、`w3/` 共 21 篇教程、13 个脚本，完成 CPU 随机模型/cache、tokenizer/loader、重复基准及跨周统计接口验证。验收范围与未测条件见 `.agents/docs/project-maintenance/career-roadmap-guides-validation-2026-10-15.md`。后续从 W1 第一天实际执行，保留真实实验日志；真实训练和 GPU 性能仍待执行，不按原日历倒填完成状态。
+已完成交付：`w1/`、`w2/`、`w3/` 共 21 篇教程、15 个脚本；当前带读改写与验证见上文各周记录，早期接口验收另见 `.agents/docs/project-maintenance/career-roadmap-guides-validation-2026-10-15.md`。用户实际学习状态由本人回答和运行证据核对，编写时的 CPU 验证不是用户已操作。真实训练与 GPU 不在本轮执行范围，未选扩展不记欠账，不按原日历倒填完成状态。
 
 Why: 用户要求每天可以手把手操作，明确纠正了额外 README 中转层；脚本应作为实际交付文件，而非只提供代码片段。验收问题还应能暴露具体理解或证据缺口，避免用笼统问题代替全面核查。
 
@@ -50,11 +54,13 @@ How to apply: 维护 `w1/`、`w2/`、`w3/` 时按学习依赖编号，每天完�
 
 Evidence: 2026-10-15 本聊天用户明确要求“有实验脚本也要给试验脚本，放在每周的脚本目录中”和“readme不合要求……指导文件中直接链接指向脚本即可”，随后补充“先创建适用于nanochat的虚拟环境”“conda命名为nanochat”；2026-10-20 用户提供五条要求，确认对照说明后明确“可以开始修改吧”，授权全程 d01–d21 编号与每日脚本/产物清单。原总计划位于 `.agents/docs/career_roadmap/nanochat_daily_execution_2026-10-01.md`。
 
-Evidence 补充：2026-10-27 用户指向 `w1/d07_benchmark_audit.md` 询问“并不能指导我学习项目，只是告诉我了要去项目哪里读源码？对吗”。上述教学充分性判断来自当日 D7 全文及 D4 对照阅读，不代表全部 21 篇均已重新审查或学习效果已实测。
+Evidence 补充：2026-10-27 用户指向 `w1/d07_benchmark_audit.md` 询问“并不能指导我学习项目，只是告诉我了要去项目哪里读源码？对吗”。最初判断来自当日 D7 全文及 D4 对照阅读；后续已逐周改写 21 篇，但不代表学习效果已实测。
 
 Evidence 补充：2026-10-27 本聊天用户追问 GPU/训练假设、给出 D7 截图询问是否要求训练，随后明确要求“开7个子代理完善w2”。本轮正文结果位于 `career_roadmap/w2/d08_data_prerequisites.md` 至 `d14_matrix_smoke.md`，各篇独立提交；验证使用现有 W2 脚本及 W3 的 `d13_aggregate.py`，中间结果仅在操作系统临时目录。
 
 Evidence 补充：2026-10-27 用户随后要求“完善W1”；结果为 `career_roadmap/w1/d01_starting_point.md` 至 `d07_benchmark_audit.md` 的逐篇提交。本轮集中运行现有 `d01_inventory_starting_point.py`、`d02_inspect_environment.py`、`d03_run_inference_tests.py`、`d04_probe_model_and_cache.py` 与 `d07_trace_generator.py`；临时测试捕获记录含真实 argv、退出码与 CPU 限制，未覆盖的硬件范围不作用户欠账。
+
+Evidence 补充：2026-10-27 用户要求“继续w3”并催促“继续”；结果位于 `career_roadmap/w3/d15_resume_draft.md` 至 `d21_project_briefing.md` 及周 scripts。改写提交从 `98f9d51` 至 `3cc769c`；临时编写验证在 `/tmp/nanochat-w3-guide-validation/`，可能被系统清理；正式脚本可复查，不将临时结果写入读者 experiments。
 
 Evidence 补充：2026-10-20 本聊天用户先说“不喜欢写repport”，随后要求“要每天特异性的，直接修改每日教程”；落点为 `w1/d01_starting_point.md` 至 `w3/d21_project_briefing.md` 的每日自验证与交流要求。
 
