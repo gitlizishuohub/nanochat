@@ -2,147 +2,218 @@
 source_files:
   - tests/test_engine.py
   - tests/test_attention_fallback.py
+  - nanochat/engine.py
+  - nanochat/flash_attention.py
   - pyproject.toml
 source_symbols:
+  - MockModel.forward
   - test_multi_sample_first_token_diversity
+  - test_seed_reproducibility
   - TestSDPAOnly
   - TestOverrideMechanism
 doc_type: tutorial
 knowledge_scope: W1 D3 CPU推理测试及失败定位
 ---
 
-# W1 D3：运行推理测试，保留失败与跳过证据
+# W1 D3：用测试判断推理代码究竟验证了什么
 
-今天让“环境看起来装好了”变成“具体测试在这个环境执行过”。预计 60–90 分钟：10 分钟检查依赖，15 分钟首次运行，20 分钟读测试，20 分钟针对失败定位，15 分钟记录。若首次导入/测试较慢，以真实用时为准；不要为满足日历删掉失败用例。
+D2 确认“这个解释器里有什么”，今天进一步判断：“哪些推理行为真的执行并符合预期？”你将读懂测试为什么这样设计，运行 CPU 测试，再从日志提出有边界的结论。预计 60–90 分钟。
 
-前置：[D2 环境盘点](d02_environment_inventory.md)。本轮 Conda 环境已创建；依赖安装完成情况必须由下面命令确认。没有 GPU 走 CPU，不跳过 CPU 验证。
+前置：[D2 环境盘点](d02_environment_inventory.md)。**今天不训练、不下载数据或权重，不需要 GPU 或 checkpoint。** 测试主要使用受控替身和随机注意力张量；其中一个测试计算梯度，但没有优化器更新参数，不能称为训练模型。
 
 ## 当天的流程阅读
 
-先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+用约 10–20 分钟读下面的小节；只需理解并口述，不新增报告或实验任务。
 
 - **阅读入口**：[4.1 配置不是可学习权重](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-1)；[4.2 从结构到权重](../../llm-training-workflow/04-model-construction-and-weight-loading.md#reading-4-2)。
-- **今天重点**：掌握配置、随机初始化、已有权重三个概念，理解随机小模型为什么也能做接口测试。结合今天的测试区分容器、替身模型和真实模型。
-- **暂时跳过**：4.2.1 的初始化分布表只看标题；不要求背数值，加载细节到 D11。
+- **今天重点**：区分配置、随机初始化、已有权重；理解没有训练好的模型也能检查接口或计算行为。
+- **暂时跳过**：4.2.1 初始化分布表只看标题；权重加载细节在 D11 学习。
 
-**读完能解释**：随机模型的测试通过，能说明形状、生成控制流和语言质量中的哪几项？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+**读完能解释**：一个测试输出符合预期，与模型已经学会语言，分别需要什么证据？
 
-## 当日脚本与产物清单
+## 1. 先把“正确”改写成一个可能失败的断言（概念推演，无需运行）
 
-所有项目内路径均以 nanochat 项目根目录为基准；外部 MiniMind 只读历史证据不改名。`dNN_` 表示全程首次使用或产生日，跨日复用不改前缀；上游源码和测试保留原生名称。
+假设 Engine 要从同一个提示生成 16 个样本。一个很具体的错误是：代码只采样一次，把同一个首 token 复制给全部 16 行。只检查“返回了 16 行”发现不了它，因为行数依旧正确。
 
-| 角色与脚本 | 用途与执行阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|
-| 入口：[`.agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py`](scripts/d03_run_inference_tests.py) | 首次完整测试；第 4 节按需定向重跑 | `tests/test_engine.py`、`tests/test_attention_fallback.py` | 激活 nanochat，已安装项目与 dev 依赖；CPU/FP32；不需 checkpoint |
+怎样使错误暴露？先让模型给全部词表项相同分数，让采样结果不被模型偏好支配；再检查 16 个首 token 中是否至少有两种值。例如 `[7,7,7,7]` 满足“有 4 个结果”，却不满足“有多个不同值”；`[7,7,12,7]` 满足后一个条件，即使并非每行互异。
 
-| 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log` | 完整测试结果与失败栈 | `d03_run_inference_tests.py` | 自动：启动 pytest 前打开，运行期间写入 |
-| `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 诊断输出，可为空 | 同上 | 自动：启动 pytest 前打开 |
-| `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 命令、退出码、用时和 CPU 限制 | 同上 | 条件生成：子进程正常返回后写入；外部中断可能缺失 |
-| `experiments/inference_infra/reports/d03_inference_smoke.md` | 测试解释、skip 和未覆盖范围 | 第 5 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d03_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
+这就是<abbr title="assertion · 断言。把预期行为写成可检查的条件；执行时条件不成立便报告失败。它只能检查写出来的条件，不能证明全部程序正确。">断言</abbr>的价值：**规定什么观察结果会使我们收回结论。** 对本例，断言针对“首 token 被广播”的缺陷，并不检验回答内容是否合理。
 
-清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。 `<UTC时间戳>` 由脚本按协调世界时生成，格式为 `YYYYmmddTHHMMSSffffffZ`；以终端 `Logs:` 打印的真实目录为准。
+### 1.1 从真实测试看输入、执行、判断
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d03_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 测试输出由清单中的 stdout/stderr 日志捕获。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+下面摘自 [test_multi_sample_first_token_diversity](../../../../tests/test_engine.py)，省略了提示和循环收集部分；这是源码带读，不需单独执行此片段：
 
-## 1. 检查同一解释器内的依赖
+```python
+model = MockModel(vocab_size=262)
+engine = Engine(model, ByteTokenizer())
+# generate(..., num_samples=16, max_tokens=1, temperature=1.0, seed=42)
+unique_tokens = set(first_tokens)
+assert len(unique_tokens) > 1
+```
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+把它拆成三件事：`MockModel` 控制输入分数；`generate` 执行真正的 Engine 生成控制流；最后的断言判断首 token 是否只有一种。这种安排使失败尽量指向采样流程，而非语言模型本身。
+
+替身 [MockModel.forward](../../../../tests/test_engine.py) 的核心是：
+
+```python
+B, T = ids.shape
+if kv_cache is not None:
+    kv_cache.advance(T)
+logits = torch.zeros(B, T, self.vocab_size)
+return logits
+```
+
+<abbr title="mock · 测试替身。用简单、可控行为代替真实组件，让一个测试聚焦另一个组件。本文替身返回全零词表分数，不执行真实 GPT 的投影、注意力或缓存写入。">Mock</abbr> 返回的 logits 全为零；采样中的 softmax 因此给 262 个词表项相同概率。它还推进缓存位置，以满足 Engine 对状态的要求，但没有真正计算 K/V。`ByteTokenizer` 用字节及少量特殊 ID 支持 Engine 的接口，也不加载训练好的分词器。
+
+如果 16 行独立均匀采样，全部恰巧一样的概率为 `(1/262)^15`，极低但不是数学上的零。测试固定 seed，使当前执行可复查；`len(set(...)) > 1` 也不等于严格证明每一行都独立。它是针对广播缺陷的强检测条件。
+
+再回看 [Engine.generate](../../../../nanochat/engine.py) 的两个相邻动作：
+
+```python
+logits = logits[:, -1, :].expand(num_samples, -1)
+# 后面在循环里：
+next_ids = sample_next_token(logits, rng, temperature, top_k)
+```
+
+复制的是**首 token 的分数**，随后按行采样。16 行可以拥有相同概率分布，同时抽出不同 token；如果复制的是已抽出的 token，就会产生开头的缺陷。该区别是本测试要保护的行为。
+
+### 1.2 三个“随机性测试”为什么都要有
+
+| 真实用例 | 控制什么、比较什么 | 可以发现的错误 |
+|---|---|---|
+| `test_multi_sample_first_token_diversity` | 同次生成多行，比较首 token 的种类 | 把一个采样结果广播给多行 |
+| `test_seed_reproducibility` | 同一提示、同一 seed，重复生成并比较序列 | 随机数状态没有按 seed 初始化或使用 |
+| `test_temperature_zero_determinism` | temperature=0，换 seed 仍比较相同输出 | 贪心分支错误地继续随机采样 |
+
+同次运行的行间变化，与重复运行的可复现并不矛盾：一个确定的随机数序列内可以有不同数。temperature=0 时 [sample_next_token](../../../../nanochat/engine.py) 直接 `argmax`，应与 seed 无关。变式推演：如果代码永远返回同一 token，后两项可能通过，第一项却会失败。因此“一个确定性测试通过”并不足以证明采样正确。
+
+## 2. 换一种真实计算：注意力测试覆盖了什么
+
+[tests/test_attention_fallback.py](../../../../tests/test_attention_fallback.py) 中的 `TestSDPAOnly.test_basic_forward` 使用真正的随机 Q/K/V 张量，并执行注意力计算，关键判断为：
+
+```python
+y = flash_attn.flash_attn_func(q, k, v, causal=True, window_size=(T, 0))
+assert y.shape == (B, T, H, D)
+assert not torch.isnan(y).any()
+```
+
+<abbr title="SDPA / Scaled Dot Product Attention · 缩放点积注意力。这里指 PyTorch 提供的计算接口；nanochat 在无法使用 FA3 时通过它执行注意力回退路径。">SDPA</abbr> 不是上面的模型替身：这里确实进行了张量计算。但断言只检查形状和没有 NaN，没有与独立参考值比较，也没有检查所有 Inf，所以不能把它描述成“数值结果已经全面证明正确”。
+
+`test_backward` 调用 `loss.backward()`，检查 Q/K/V 梯度存在及 Q 梯度无 NaN；它不调用 `optimizer.step()`，不训练 GPT。`test_kvcache` 执行随机注意力 prefill 和单 token 续算，检查输出形状和推进后的位置。`test_engine.py` 中的两个 `kv_cache` 测试则直接检查缓存容器的分配、推进、reset 和已写入区域复制。**容器能复制，与真实 GPT 缓存和全前缀计算数值相符，是两种不同性质**；后一项在 D5 用随机 GPT 比较。
+
+另一组 `TestFA3VsSDPA` 要让 FA3 与 SDPA 在相同输入上比较数值和梯度，需要适用硬件/内核。今天脚本隐藏 CUDA，相关测试跳过是正确的条件分支；GPU 对照是可选扩展，未做不算每日欠账。
+
+## 3. 现在执行 CPU 测试并读结果（实际操作）
+
+下面会导入依赖并运行两份现有测试，写测试日志和运行元数据；不下载、不启动训练。使用当前终端的 `nanochat` 环境，先确认解释器：
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
 {
 python -c 'import sys,torch,pytest; print(sys.executable); print(torch.__version__); print(pytest.__version__)'
+d03_status=$?
+printf 'dependency_check_exit=%s\n' "$d03_status"
 } > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
-看到 `ModuleNotFoundError` 就先处理环境，不能把它解释成模型算法错误。本次任务由主流程安装 CPU 和 dev 依赖；安装未结束时不要同时启动第二次安装。准备好后用[测试捕获脚本](scripts/d03_run_inference_tests.py)：
+出现导入错误先返回 D2 处理相应依赖，不将其归因于模型算法，也不假定后台正在安装依赖。检查成功后运行[测试捕获脚本](scripts/d03_run_inference_tests.py)：
 
 ```bash
 {
-python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --help
 python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py
+d03_status=$?
+printf 'inference_tests_exit=%s\n' "$d03_status"
 } > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
-脚本使用当前 `sys.executable -m pytest`，显式限制 CPU 和 FP32；每次建立独立时间戳目录，不覆盖上一轮日志。它关闭 pytest 本地缓存，把 Python 字节码缓存放 `/tmp/nanochat_w1_pycache`，避免无意义的仓库文件变动。
+脚本用当前 `sys.executable -m pytest`，只选 `tests/test_engine.py` 和 `tests/test_attention_fallback.py`，设置 `CUDA_VISIBLE_DEVICES=""` 与 `NANOCHAT_DTYPE=float32`。它关闭 pytest 本地缓存，把字节码缓存放 `/tmp/nanochat_w1_pycache`。每次创建新时间戳目录，终端的 `Logs:` 给出本次实际位置。
 
-## 2. 找到三份原始证据
+### 3.1 先读摘要，再读三份证据
 
-终端打印 `Logs:` 后的目录位于 `experiments/inference_infra/results/w1/d03_pytest/`：
-
-- `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log`：测试收集、通过数、跳过数与失败栈。
-- `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log`：导入失败等诊断信息；为空也正常。
-- `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json`：精确参数数组、工作目录、真实退出码、用时和环境限制。
-
-<abbr title="pytest · Python 的测试运行器。它收集以 test 命名的函数和类，执行断言，并区分通过、失败、跳过及收集错误。测试数量可能随代码变化，应记录当次实际结果。">pytest</abbr> 的 `exit_code=0` 表示所选测试运行成功；不等于所有 GPU 分支通过。`skipped` 是未执行条件分支，不能计入已验证 GPU 正确性。记录实际摘要，不在本教程预填固定通过数。
-
-## 3. 逐个读懂现有用例证明什么
-
-```bash
-{
-rg -n '^def test_|^class Test|def test_' tests/test_engine.py tests/test_attention_fallback.py
-sed -n '15,130p' tests/test_engine.py
-rg -n 'skipif|HAS_FA3|DEVICE|DTYPE|test_override_auto' tests/test_attention_fallback.py
-} > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
-```
-
-按这条阅读顺序理解，可直接在聊天中说明：
-
-1. `MockModel` 返回均匀分数，`ByteTokenizer` 用字节和少量特殊 token 模拟分词。<abbr title="mock · 测试替身。用受控的简单对象隔离一个组件，例如检验生成控制流而无需真实权重。通过 mock 测试不能说明真实 GPT 数值计算已正确。">mock 测试</abbr> 用于隔离 Engine 控制流。
-2. `test_kv_cache_basic` 检查形状、推进和 reset；`test_kv_cache_prefill` 检查复制。写清“验证缓存容器”，不要写“真实模型 KV 等价已证明”。
-3. 多样本首 token 测试防止一个采样结果被广播到所有行；同 seed 可复现与温度为零的确定性检验的是不同性质。
-4. `TestSDPAOnly` 在可用设备执行基础前向、反向和缓存操作。当前脚本隐藏 CUDA，因此它选 CPU。
-5. FA3 对照测试有硬件/内核条件，CPU 上跳过符合预期。<abbr title="SDPA / Scaled Dot Product Attention · 缩放点积注意力接口。这里由 PyTorch 执行回退计算，CPU 路线验证的是该分支，不是 FA3 内核。">SDPA</abbr> 成功不能替代 FA3 对照。
-
-对每组测试确认“证明什么、仍未证明什么”，可直接口述，不要求另做表格。真实 GPT 的缓存数值与 smear 状态在 D5 的小模型探查中补充。
-
-## 4. 失败分类后只重跑相关用例
-
-| 错误 | 类型 | 下一步 |
+| 观察 | 含义 | 应怎样表述 |
 |---|---|---|
-| `No module named torch/pytest` | 依赖/解释器 | 重看 `sys.executable`；等待安装完成后重试 |
-| `No module named tiktoken` 等 | 传递导入依赖 | Engine 导入 checkpoint_manager 会拉入别的依赖；仅有 torch 不一定够 |
-| 动态库加载失败 | 环境 | 保存完整 stderr，核对 CPU wheel 与解释器 |
-| assertion failure | 行为或环境条件 | 看第一个失败栈、输入、dtype、选中后端 |
-| FA3 required 跳过 | 预期硬件限制 | 记 `PENDING_GPU`，不安装随机内核碰运气 |
-| 进程被终止 | 资源/外部中断 | 保存中断事实；无完整退出码则未验收 |
+| `passed` / `.` | 该用例执行后断言满足 | 指明测试及输入范围，不扩大成全模型正确 |
+| `skipped` / `s` | 条件不满足，测试主体没执行 | 记录跳过条件；不算通过或失败 |
+| `failed` / `F` | 测试执行后断言不满足 | 找到用例名与首个失败断言，保留输入及错误 |
+| `ERROR collecting ...` | 收集/导入阶段出错 | 不能报告相应测试已执行 |
 
-例如只重跑缓存容器与 SDPA：
+这是状态解释，不是本次预填成绩。退出码为 0 表示所选测试成功，允许其中有 skip；脚本 JSON 的 `status=PASS` 同样只表示 pytest 返回 0。没有运行时不能套用历史通过数。
+
+`experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/` 内：
+
+- `d03_stdout.log`：读最终摘要、失败用例名，再向上读相应栈和断言值。
+- `d03_stderr.log`：保留额外诊断；为空也正常，导入错误也可能出现在 stdout 的 pytest 收集报告中，因此两份都要查看。
+- `d03_run.json`：核对 `argv` 中确实选了两文件，`cwd`、真实 `exit_code` 和环境限制是否符合这次运行；外部中断时可能来不及生成。
+
+由这些证据，可以形成这样的结论：“本次 CPU/FP32 下，日志列出的 Engine 替身测试及 SDPA 基础计算测试通过；FA3 条件用例没有执行；未测试训练好 GPT 的语言质量。”具体状态必须替换为自己的日志结果。
+
+### 3.2 失败栈怎样把问题缩小
+
+以下是**假设失败**，无需制造故障：若日志定位到 `test_multi_sample_first_token_diversity` 的 `len(unique_tokens) > 1`，且显示所有行同一首 token，先问“分数是否先扩到 B 行再采样？”而不是先换 tokenizer 或重新训练。测试用的是均匀分数替身，训练权重不参与这条路径。
+
+若失败在 `test_kv_cache_basic` 的 `get_pos() == 15`，就沿 `advance(10)`、`advance(5)` 检查状态累加；如果失败在 `test_basic_forward` 的输出形状，则从 Q/K/V 输入布局和注意力返回布局定位。测试函数名只提供入口，**真正缩小问题的是失败断言、实际值和调用栈**。
+
+| 实际问题 | 下一步 |
+|---|---|
+| 缺 torch/pytest/tiktoken 等模块 | 核对 `sys.executable` 与依赖；Engine 的传递导入也需要项目依赖 |
+| 动态库加载失败 | 保存完整诊断，回查 D2 的解释器与安装版本 |
+| 行为断言失败 | 定位用例、输入、断言值和选中后端；只重跑相关项辅助诊断 |
+| FA3 条件跳过 | 记录条件未执行；CPU 学习主线可完成 |
+| 进程被终止、缺完整记录 | 保存中断事实，不能据残留旧文件报告本次完成 |
+
+例如只重跑缓存容器与 SDPA（有相关问题时再执行）：
 
 ```bash
 {
 python .agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py --select 'kv_cache or SDPAOnly'
+d03_status=$?
+printf 'targeted_tests_exit=%s\n' "$d03_status"
 } > >(tee -a experiments/inference_infra/reports/d03_checks.log) 2>&1
 ```
 
-`--select` 是 pytest 的名字表达式。定向通过只说明筛选后的用例通过；最终仍需完整两文件运行。现有 `test_override_auto` 用 `USE_FA3 == HAS_FA3` 作为断言，而生产路由还看 compute dtype；未来在有 FA3 且强制 FP32 的机器运行时，应按源码核实这一测试假设，不能盲目认定是内核坏了。当前 CPU 隔离下这两个值都应为 false。
+`--select` 传给 pytest 的 `-k` 名称筛选表达式。定向通过只覆盖这部分；若修改环境或代码解决了问题，再补完整两文件检查，以免别的测试退化。现有 `test_override_auto` 把 `USE_FA3 == HAS_FA3` 作为断言，但生产路由还检查 compute dtype；以后换到有 FA3 且强制 FP32 的环境时应重新核实该测试假设。今天 CPU 隔离下两者均应为 false。
 
-## 5. 当天自验证与交流问题并验收
+## 4. 用四个问题检验理解
 
-按题号在聊天中回答即可，无需写报告。概念题说明理由或推导；实测题引用当天日志或 JSON 中支撑结论的片段，运行命令、退出码和证据路径提供一次即可。未执行的实测项标 `PENDING`；引用历史结果时注明日期与版本，不必为回答问题额外重跑实验。
+直接在聊天按题号回答即可；实测信息只需附一次命令、退出码和本次目录。没有执行的 CPU 操作说明原因；引用历史证据注明日期与版本，不为答题额外训练或做 GPU 实验。
 
-1. **读懂本次测试结论**：本次完整两文件测试实际通过、跳过和失败了什么？根据日志，今天能对推理正确性作出的最强结论是什么？
+1. **广播缺陷**：假设 16 行都返回首 token 7，哪些已讲过的断言能发现问题，哪些仍可能通过？为什么测试要用均匀分数替身？
 
-   **核对要点**：引用真实摘要并区分执行与跳过；如只有筛选运行或收集失败，结论覆盖范围应相应缩小。
+   **核对要点**：能区分样本数、行间变化与重复运行确定性，并将替身和待测缺陷联系起来。
 
-2. **测试替身能发现什么**：选一个 Engine 用例，说明 MockModel/ByteTokenizer 为什么足以检验它；再举一个即使该用例通过仍可能存在的真实 GPT 错误。
+2. **证据边界**：从本次摘要中分别选一个执行过的测试与一个跳过条件，说明它们支持或不支持什么结论。若本次没跑，改用源码推演并明确无运行证据。
 
-   **核对要点**：解释所选断言与替身提供的受控行为，并给出具体未覆盖机制，而非只说“mock 不是真模型”。
+   **核对要点**：不把 JSON 的 PASS 等同所有分支通过，不把形状/无 NaN 等同完整数值正确。
 
-3. **区分采样性质**：首 token 多样性、同 seed 复现、temperature=0 确定性分别防止哪类错误？如果首 token 被采样一次后广播给所有行，哪个测试应先发现？
+3. **从失败走向代码**：假设缓存位置断言预期 15、实际 5，你会先查看哪两个动作和哪一个方法？与缺少 torch 的错误为何应走不同排查路径？
 
-   **核对要点**：将错误与对应断言关联，区分行间随机性和重复运行确定性；不要求不同样本的 token 全部互异。
+   **核对要点**：用具体状态和调用定位，区分收集/导入错误与执行后的行为失败。
 
-4. **定位失败并收回结论**：若出现导入错误、行为断言失败或 FA3 条件跳过，分别怎样处理？用本次实际情况说明下一步；没有失败则说明一种故障的定向定位方法。
+4. **下一层验证**：为什么这些测试通过后，D4 仍要运行随机 GPT、D5 仍要比较缓存与全前缀 logits？
 
-   **核对要点**：定位到首个错误或跳过条件；定向重跑成功后仍清楚完整测试是否已补齐，CPU SDPA 证据不替代 FA3 数值对照。
+   **核对要点**：指出替身没执行的真实模型计算，以及基础注意力测试未证明的端到端等价；无需讨论语言质量评估方案。
 
-验收要求：有精确命令与退出码；理解 mock 与真实模型区别；明确 skip；没有把未运行当 PASS。失败未解决也要保留可复查日志，然后按依赖阻塞继续读源码，不能进入“性能已通过”状态。
+## 5. 脚本、产物与日志回查
 
-交流时附实际日期、commit、命令、原始日志目录、状态与下一步；用时可选，不需再手抄自动记录。
+所有项目内路径相对项目根目录。清单表示执行时预期的产物，不代表文件已经生成；不覆盖或改名外部历史证据。
+
+| 脚本完整路径 | 阶段与用途 | 输入及运行条件 |
+|---|---|---|
+| [`.agents/docs/career_roadmap/w1/scripts/d03_run_inference_tests.py`](scripts/d03_run_inference_tests.py) | 第 3 节完整测试及按需定向重跑 | `tests/test_engine.py`、`tests/test_attention_fallback.py`；当前 nanochat 解释器可导入项目和 pytest，CPU/FP32，无 checkpoint |
+
+| 完整项目相对路径 | 用途与生成条件 |
+|---|---|
+| `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stdout.log` | 捕获脚本自动打开并写入 pytest stdout，包括摘要与失败栈 |
+| `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_stderr.log` | 同脚本自动打开并捕获 stderr，可为空 |
+| `experiments/inference_infra/results/w1/d03_pytest/<UTC时间戳>/d03_run.json` | 子进程正常返回后由同脚本写入命令、退出码、用时、限制；外部中断可能缺失 |
+| `experiments/inference_infra/reports/d03_checks.log` | 各命令组通过 tee 自动追加的输出与即时退出码 |
+| `experiments/inference_infra/reports/d03_inference_smoke.md` | 可选人工整理聊天答案和证据，不是完成本日的前置 |
+
+`<UTC时间戳>` 是脚本按协调世界时生成的 `YYYYmmddTHHMMSSffffffZ`，以 `Logs:` 实际输出为准。<abbr title="JSON / JavaScript Object Notation · 用键值和数组保存结构化数据的文本格式；此处记录本次真实命令与退出状态，便于复查。">JSON</abbr> 中自动已有的信息不必手抄。
+
+日志命令采用局部 <abbr title="Bash process substitution · 进程替换。命令组输出同时交给 tee 显示并追加；命令组结束后恢复终端输出，不持续记录提示符。">进程替换</abbr>，复制时包含外层花括号及末尾重定向。`$?` 必须紧跟被检查的命令保存；组内最后 `printf` 的状态不代表测试状态，以显式打印值和 JSON 为准。若旧终端仍有全局重定向，关闭后新开终端；修改教程不会终止旧重定向。
+
+本日完成标准是能解释断言针对的缺陷、实际运行结论及未覆盖范围。CPU 依赖阻塞不妨碍概念阅读，但需明确尚无本次运行证据；不将其写成性能验收。
 
 上一篇：[D2 环境盘点](d02_environment_inventory.md)。下一篇：[D4 模型与形状](d04_model_shapes.md)。
