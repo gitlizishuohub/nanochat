@@ -1,18 +1,13 @@
 ---
 source_files:
   - nanochat/engine.py
-  - nanochat/gpt.py
-  - nanochat/checkpoint_manager.py
-  - nanochat/flash_attention.py
-  - scripts/infer_bench.py
-  - tests/test_engine.py
-  - tests/test_attention_fallback.py
+  - .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py
 doc_type: tutorial
 knowledge_role: supporting
-knowledge_scope: W3第3日实操与验收
+knowledge_scope: W3第3日学习与实践
 ---
 
-# W3 D3 · 单样本基线与无 GPU 分流
+# W3 D3 · 单样本生成与测量结果核查
 
 [上一日](d16_baseline_matrix.md) · [下一日](d18_batch_runs.md)。
 
@@ -26,153 +21,131 @@ knowledge_scope: W3第3日实操与验收
 
 **读完能解释**：编译或预热耗时与正式生成延迟怎样区分？CPU 实测能支持哪些结论，哪些仍需 GPU？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
-## 开始前：固定终端和记录方式
+## 今天学什么，做到哪里算完成
 
-本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+今天用一个 B=1 的小案例，学会从源码和 raw 判断“一次测量做了什么”，约 60–90 分钟。**CPU 随机小模型即可；初始化和前向生成不会训练模型，不需要 checkpoint 或外部分词器文件。**
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+已完成 W2 D13 的 `experiments/inference_infra/results/raw/d13_p8_g4_b1_random_cpu.jsonl`，或 D14 的 B1 gate 记录时，可以直接复用原文件，不改编号、不重复测量。若输入或环境不同，先按下文检查；没有 raw 再执行第 3 节。此前单测已经通过且源码未改，无需为本日再跑整套测试。
+
+## 1. 先在纸面算清一条有效记录
+
+固定 P=8/G=4/B=1，无提前结束或工具输出。模型先处理 8 个提示位置产生第一个预测；再分别输入前三个生成 token，得到后续三个预测。输出四列只有三个后续间隔，不能把 G 当成间隔数。
+
+假设首个输出等 30ms，后续等 8、10、12ms：
+
+| 量 | 计算 | 解释 |
+|---|---|---|
+| TTFT | 30ms | 第一次 next 前到首个 yield 返回 |
+| TPOT | `(8+10+12)/3=10ms` | 后续输出间隔的算术平均 |
+| elapsed | `30+8+10+12=60ms` | 包含首个等待的总时间 |
+| tokens/s | `4/0.060≈66.67` | 有效总输出除以同一段总时间 |
+
+这是教学算例，不是速度目标。<abbr title="TTFT / Time To First Token · 首 token 等待；此处包括 Engine 的分配、prefill、缓存复制和首个采样，不包含模型加载和文本编码。">TTFT</abbr> 不等于纯 prefill 算子时间；<abbr title="TPOT / Time Per Output Token · 本包装器每次运行取首个输出之后的间隔均值；G=1 时没有后续间隔，记空值。">TPOT</abbr> 在 G=1 时应为空，不能用 0 表示“瞬间生成”。
+
+## 2. 带读真正决定边界的四处代码
+
+对照 [d12_benchmark.py](../w2/scripts/d12_benchmark.py) 的 `load`、`measure`、`main`：
+
+1. `load` 的 `--random-model` 分支建立 L=2、C=64、词表 512 的模型，调用 `init_weights()` 和 `eval()`；随后在 `torch.inference_mode()` 中测量，没有 loss/backward/optimizer.step。`ContractTokenizer` 是脚本内合成 ID 映射，不读取训练词表。
+2. 输入构造为 `[BOS]+[1]×(P−1)`，控制 token 数和计算形状；不是中文文本的质量测试。模型加载、指纹和环境检查在计时外。
+3. `measure` 在首次 `next(stream)` 前记起点，每次返回后记录时间；CPU 的 `sync` 是空操作，CUDA 才同步。计时含 Python 控制和逐步处理开销，极小模型上这些开销可能明显。
+4. 只取至多 G 次 yield，最后 `close()`；不会为探测 StopIteration 再恢复生成器。结合 [Engine.generate](../../../../nanochat/engine.py) 的 `yield` 后前向位置，可以解释为何这能避免一次无用的最终前向。
+
+因此本日核查的是一个明确包装器的生成与计时契约。`model_tag` 的旧默认字符串在随机分支也可能记录到 raw；判断模型来源应看 `model_kind=random` 与配置，不能据此声称加载了训练权重。
+
+## 3. 有合格记录就复用，没有才运行
+
+从项目根执行，核对当前自动激活的解释器。以下命令固定 CPU float32 和线程数，避免后台线程策略变成额外变量。若已有相同目标，换成新 attempt 目录，因 raw 是追加写，不能把两次 session 意外堆进一个“八行结果”。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+mkdir -p experiments/inference_infra/reports
 {
-python -c "import sys; print(sys.executable)"
-git status --short
-} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
-```
-
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
-
-本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
-
-## 今天的目标（约 2–4 小时，计时任务可缩短）
-
-今天检查 B=1 的三个输入长度与两个生成长度中可运行的子集。每个有效 GPU case 至少 5 次正式运行；无 GPU 时验证 CPU 契约和执行入口，GPU 结果留 `PENDING_GPU`。前置：昨天的固定模型、矩阵和协议；不因为日历推进而跳过 W2 加载检查。
-
-<abbr title="TTFT / Time To First Token · 首token时延；本教程从第一次next开始到首个yield完成并同步，包含Engine缓存分配、预填、复制及采样，不包括tokenizer与模型加载。">TTFT</abbr> 包含首个输出前的 Engine 工作。<abbr title="TPOT / Time Per Output Token · 后续输出步平均耗时；本周每次运行用首步之后的逐步同步时间求算术平均，B大于1时为一列token的步时间。">TPOT</abbr> 衡量首 token 之后每步时间，不能把 TTFT 简单当成纯矩阵乘的 prefill 时间。
-
-## 第一步：核对设备和依赖
-
-```bash
-{
-python -c "import torch; print(torch.__version__); print('cuda_available=',torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU only')"
-python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --help
-} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
-```
-
-若 import 失败，记录解释器和错误，先完成环境修复，不把“无 torch”误写成“CPU 测试通过”。有 GPU 但返回 false 时检查所装 PyTorch 版本与驱动；今天不自动租卡或联网安装。
-
-## 第二步 A：有 GPU，显式执行 B=1
-
-在同一终端恢复昨天的真实 META、MODEL_TAG、CHECKPOINT_STEP 和 NANOCHAT_BASE_DIR。以下命令使用[矩阵驱动](scripts/d16_matrix.py)，从项目根运行：
-
-```bash
-{
-python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
-  --artifact-day 17 --meta "$META" --source base --model-tag "$MODEL_TAG" --step "$CHECKPOINT_STEP" \
-  --batch 1 --device cuda --execute \
-  --output-dir experiments/inference_infra/results/raw/w3_b1_attempt01
-} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
-```
-
-`--execute` 是实际运行开关；去掉它仅列计划。程序逐 case 等待并保存完整 log；`PROCESS_OK` 仅说明子进程退出码为 0，不等于全部正式行都有效。其余 B=4 case 仍列 PENDING。顺序固定有利于首次核查，正式分析仍需考虑温度、时钟和背景负载；不要把一次跑出来的最小值当成绩。
-
-在运行中观察机器负载和日志；一组耗时明显超出预算可用 Ctrl+C 停止，保留已落盘行，在聊天注明中断时间，或可选补入日志。中断可能导致矩阵缺未落盘 case，不能标成全矩阵完成；恢复用新的 attempt 目录。
-
-## 第二步 B：无 GPU，执行一个小 CPU 契约
-
-先保留昨天 GPU 计划不动，再用[W2 基准脚本](../w2/scripts/d12_benchmark.py) 的随机小模型做短输入验证。<abbr title="Smoke test · 冒烟验证；用很小工作量检查接口、文件格式与执行路径，不证明模型质量或GPU性能。">smoke</abbr> 只检查程序是否形成闭环。
-
-```bash
-{
+python -c "import sys,torch; print(sys.executable); print(torch.__version__)"
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
-  --device cpu --random-model --prompt-tokens 32 --decode-tokens 8 --batch-size 1 \
-  --warmup 3 --repeats 5 --seed 42 \
-  --output experiments/inference_infra/results/raw/d17_p32_g8_b1_cpu_contract.jsonl
-python -m pytest tests/test_engine.py tests/test_attention_fallback.py -q
+  --help
 } > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
-随机权重/测试 tokenizer 是接口夹具，不能代替实际 checkpoint 的性能报告。CPU SDPA 测试通过也不证明 FA3 通过，GPU 测试被跳过必须单列 skip 数。CPU 机器资源有限时先只跑 Engine 测试，完整 fallback 单测后续补记。
-
-测试入口为 `python -m pytest`，输入为 `tests/test_engine.py` 与 `tests/test_attention_fallback.py`；需已安装 pytest/PyTorch。两者是上游原生测试文件，保留命名；测试输出保存在 `experiments/inference_infra/reports/d17_checks.log`，未配置报告插件，不会自动生成独立测试报告。
-
-## 第三步：看一行真实原始记录
-
-用下面只读命令，替换为你刚生成的 case 文件；不要拿 matrix.jsonl 当 benchmark raw。
+`import torch` 失败就先回 D02 核对解释器，不误称为 CPU 验证通过。当前本机 nanochat 解释器应为 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`；换机按实际路径核对，不另建环境。
 
 ```bash
 {
-python -c "import json,pathlib; p=pathlib.Path('experiments/inference_infra/results/raw/d17_p32_g8_b1_cpu_contract.jsonl'); r=[json.loads(x) for x in p.read_text().splitlines()]; print(json.dumps(r[-1],indent=2,ensure_ascii=False))"
+NANOCHAT_DTYPE=float32 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
+  --device cpu --random-model --prompt-tokens 8 --decode-tokens 4 \
+  --batch-size 1 --warmup 3 --repeats 5 --seed 42 \
+  --output experiments/inference_infra/results/raw/w3_cpu_attempt01/d17_p8_g4_b1_random_cpu.jsonl
+D17_RC=$?
+printf 'benchmark_exit=%s\n' "$D17_RC"
 } > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
 ```
 
-检查 `phase` 区分 warmup/measure；正式至少 5 行，`status=ok` 才候选有效。`actual_decode_steps` 是 yield 列数，`generated_tokens` 是排除终止、forced 和完成行 padding 后的有效 token 总数，两者不可互换；B=1 也可能因工具规则而不同。检查 TTFT、decode_step_ms、elapsed_ms 都为正且单位 ms，`env`、model_config、后端、精度都有记录。
+正常情况有 3 条 `warmup` 和 5 条 `measure`；预热不参与正式统计，用于减轻首次初始化等干扰，不能保证机器完全稳定。这里没有显式 `torch.compile`，不能把所有预热都称作“编译”。
 
-## 失败分流、产物与验收
+## 4. 读结果并交叉验证
 
-- `early_stop`：保留原始行，检查 assistant_end/bos 或工具强制 token；不能通过修改 EOS 语义把它包装成原协议成功。
-- OOM/error：查看同名 log 的异常；模型加载期失败可能没有 raw 行，但进程退出码仍有记录。
-- `INVALID_CONTEXT`：今天不运行；应扩大合法 checkpoint 上下文并重建不同实验，而非悄悄截断 P。
-- 正式有效不足 5 次：可继续补跑同条件新 attempt，但跨目录合并前审计模型、env 和 run_id；今天可标不足样本。
+下面只读文件，不运行模型。复用 W2 结果时，把 `raw` 改为原路径；不要复制改名冒充 D17 新执行。
 
-按文末问题在聊天核对每 case 的计划状态、退出码、measure总数/有效数、raw与log路径；`experiments/inference_infra/reports/d17_baseline_b1.md` 仅为可选整理位置。验收：所有 B1 候选都可追踪；至少一个可用设备的功能验证或明确依赖阻塞；没有将 CPU/random 数字写成 GPU baseline。下一天专看批量行为。
+```bash
+{
+python - <<'PY'
+import json
+from collections import Counter
+from pathlib import Path
+raw = Path('experiments/inference_infra/results/raw/w3_cpu_attempt01/d17_p8_g4_b1_random_cpu.jsonl')
+rows = [json.loads(s) for s in raw.read_text().splitlines() if s.strip()]
+print(Counter((r.get('session_id'), r.get('phase'), r.get('status')) for r in rows))
+row = next((r for r in rows if r.get('phase') == 'measure' and r.get('status') == 'ok'), None)
+print(json.dumps(row if row is not None else rows[-1], ensure_ascii=False, indent=2))
+PY
+} > >(tee -a experiments/inference_infra/reports/d17_checks.log) 2>&1
+```
+
+从一条正式行核对：`actual_decode_steps=4`、`len(decode_step_ms)=3`、`per_row_generated_tokens=[4]`、`generated_tokens=4`；再复算 elapsed、TPOT 和吞吐，时间须为正且有限。核对 CPU、random、实际 precision/backend、model_config 和 env；CUDA 显存字段为 null 表示不适用，不是“零显存”。D19 会自动做更完整的验证。
+
+若没有有效行，上面会打印最后一条以便看失败。`early_stop` 表示未满足固定长度契约；BOS/assistant_end、工具 forced token 等可能影响计数，须看原始状态，不能补写成四个。退出 2 可能是提前结束，也可能是 argparse 参数错误；后者可能没有 raw，须合看 stderr。加载或运行异常通常退出 1、保留 error 行；进程启动/导入失败也可能只留下日志。修复后用新路径，保留原记录。
+
+## 可选扩展
+
+已有匹配训练权重且希望测量时，沿 D16 的身份核对后再设计独立实验。GPU 未选择不登记待补。CPU 随机模型即使八行全部成功，也不证明语言能力、GPU 性能或缓存相对无缓存的加速比；本日没有执行那个对照。
 
 ## 本日脚本与产物清单
 
-下列路径以项目根目录为基准；脚本编号保留首次使用日。外部历史归档与上游 checkpoint 原生文件名保留，按正文真实绝对路径或环境变量解析；不冒充项目新产物。<abbr title="条件生成：只有指定分支执行、前置文件满足且实际写入后，文件才算存在；清单中的目标路径本身不证明生成成功。">条件生成</abbr>须在验收时核对。只打印的检查统一进入本日 checks 日志，不另称生成报告。
+路径相对于项目根目录。脚本保留首次使用日编号，历史文件不改名；表中目标只在实际运行时生成。
 
-| 脚本完整项目相对路径 | 用途 | 阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|---|
-| [.agents/docs/career_roadmap/w3/scripts/d16_matrix.py](scripts/d16_matrix.py) | 固定12个组合，按开关执行子集 | 计划/显式运行 | META 指向真实上游 meta；MODEL_TAG、CHECKPOINT_STEP | 计划需真实 meta；--execute 需权重/tokenizer，CUDA运行需GPU |
-| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 矩阵内部调用；CPU分支直接调用 | 逐次测量 | checkpoint及合成prompt；CPU示例使用随机夹具 | 依赖 PyTorch；真实基准需匹配 tokenizer |
+| 脚本完整路径 | 用途与输入 | 条件 |
+|---|---|---|
+| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 固定 P8/G4/B1；随机小模型生成与 raw | 已有可导入 torch 的环境；CPU，无训练 |
 
-| 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/reports/d17_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g32_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g32_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g128_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p32_g128_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p128_g32_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p128_g32_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p128_g128_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p128_g128_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p512_g32_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p512_g32_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p512_g128_b1.log` | 对应组合的子进程输出/错误 | d16_matrix.py | 满足上下文并选中该批量、--execute 时生成 |
-| `experiments/inference_infra/results/raw/w3_b1_attempt01/d17_p512_g128_b1.jsonl` | 该组合逐次测量行 | d12_benchmark.py（矩阵调用） | 条件生成；模型加载异常写 error 原始行；解释器启动、导入或参数解析失败可能只有 log，无 raw |
-| `experiments/inference_infra/results/raw/d17_p32_g8_b1_cpu_contract.jsonl` | 无 GPU 分支的短输入随机模型记录 | d12_benchmark.py | 仅执行 CPU 分支且成功写入后存在 |
-| `experiments/inference_infra/reports/d17_baseline_b1.md` | 候选状态、有效数及失败边界 | 末尾交流后自愿整理 | 可选人工笔记，聊天和原始结果可替代 |
+| 产物完整路径 | 生成者 | 含义与条件 |
+|---|---|---|
+| `experiments/inference_infra/results/raw/w3_cpu_attempt01/d17_p8_g4_b1_random_cpu.jsonl` | d12_benchmark.py | 新测才生成；复用 W2 时保留 W2 原路径 |
+| `experiments/inference_infra/reports/d17_checks.log` | 本日各命令组 tee | 局部 stdout/stderr、退出码；不持续接管终端 |
+| `experiments/inference_infra/reports/d17_baseline_b1.md` | 本人自愿整理 | 可选，聊天与自动记录可替代 |
 
 ## 本日自验证与交流
 
-按题号在聊天中回答即可，预计交流约 15–20 分钟，不要求另写报告。开头一次说明本次实际走 GPU checkpoint 还是 CPU 随机模型分支，并附日期/版本及一份可定位的日志/raw；之后只引用支撑判断的关键片段，不必重复环境、命令和路径。未执行写 `PENDING`，历史结果注明归属；GPU 待测保留 `PENDING_GPU`，不为答题增加长任务。
+用同一份真实 raw 回答；没有执行条件时概念题可标明假设，实际操作状态如实说明，不强制另写报告。
 
-1. 根据今天真实检查的结果，你有条件完成哪一级验证？哪一条前置证据决定了不能把它叫作更高一级的基线？
+1. 从一条正式行复算三种指标。为什么 G=4 对应三个间隔？
 
-   **核对要点**：结合依赖可用性、设备、模型与 tokenizer 加载情况作判断，区分依赖阻塞、CPU/random 契约和真实 GPU checkpoint 测量。引用实际关键输出；不能因计划存在、CUDA 可用或脚本帮助能打开就声称模型基准通过。
+   **核对要点**：首个预测来自 prefill；计数、单位和时间范围对应，实测不要求等于教学数值。
 
-2. 抽一条实际正式运行，判断它是否完成了要求的固定长度工作量。假如 `status=ok`，你仍要核对哪些相互约束的数据？
+2. 你这份文件有几个 session、多少预热与有效正式行？是否达到本日方法约定？
 
-   **核对要点**：用该行的 G、实际输出列数、后续间隔数、每行有效 token 和总数逐项交叉核查；检查时间为正且有限。能解释终止/forced token 为何可能使列数与有效输出不同；没有真实行时可推演字段关系，实际结果继续待验。
+   **核对要点**：按身份分开计数，不能把两次不足五行的 session 直接凑成一个；不能只看进程提示。
 
-3. 不看进程的成功提示，只依据一个 session 的原始行，今天有多少次预热、多少次正式运行、多少次完整有效？这些证据允许它进入什么类型的后续统计？
+3. 若日志只有参数错误而没有 raw，应先重新训练模型吗？下一步最小检查是什么？
 
-   **核对要点**：从 `phase/status` 与第 2 题的完整性条件核数，保留失败和不足样本。说明预热与正式样本的用途，核对至少 3 次成功预热及至少 5 次有效正式运行的门槛；CPU/random 即使满足次数仍属于契约验证。`PROCESS_OK` 不能替代这份判断。
+   **核对要点**：先查解释器、帮助与参数，区分发生阶段；无 raw 不等于缓存算法失败。
 
-4. 选今天一处真实失败或可疑结果，说明你会如何定位并恢复。若未遇到失败，请推演“只看到非零退出码、没有 raw”的情况。
+4. 现在能否把结果写为“实现了 GPU 推理加速”？请改成证据能支持的一句描述。
 
-   **核对要点**：先区分解释器/导入/参数解析、模型加载和生成阶段，再说明查哪段 case log 或原始错误行；证据不足就标未知。恢复保留旧文件并用新 attempt，说明下一次最小检查；不通过删失败行、改 EOS 规则或换模型沿用原名制造成功，也不要求故意注入故障。
+   **核对要点**：说明本人动作、CPU/random 范围及计时核查，不能越过设备与对照边界。
 
-## 核对记录与完成标记
+## 完成核对
 
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
-
-- [ ] 输入条件与前一天产物已核实。
-- [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
-- [ ] 示例数值与真实结果已区分，失败和待测未删除。
-- [ ] 能说明本日证据证明什么、尚不能证明什么。
+- [ ] 能解释源码的起止边界，并交叉核对一条记录。
+- [ ] 已有合格结果被复用；新测或失败有真实文件与退出码。
+- [ ] 主线无训练/GPU前置，未选择扩展不留欠账。
