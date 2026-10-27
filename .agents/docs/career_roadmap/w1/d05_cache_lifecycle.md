@@ -14,11 +14,11 @@ doc_type: tutorial
 knowledge_scope: W1 D5 预分配缓存生命周期与状态探查
 ---
 
-# W1 D5：跟踪 prefill、批量复制和逐步 decode
+# W1 D5：用同一段前缀看懂缓存怎样替代重复计算
 
-今天不重写缓存。你要理解已有缓存的生命周期，并实际检查位置推进与 smear 状态。预计 90 分钟：20 分钟容器，25 分钟生成器，20 分钟探查，15 分钟核验问题，10 分钟验收。没有 GPU 和 checkpoint 都可用 CPU 随机模型完成。
+今天解决一个问题：**模型每次只输入一个新 token，为什么仍能根据整个前缀预测下一个 token？** 答案不只是“有 KV Cache”，还涉及缓存了什么、位置怎样对齐，以及本项目额外保存的 embedding 状态。
 
-前置：[D4 模型与形状](d04_model_shapes.md)。D4 的无缓存路径是对照；今天必须使用相同权重与相同前缀比较，不能比较两个独立随机模型。
+前置：[D4 模型与形状](d04_model_shapes.md)。第 1–3 节是纸面推演，无需运行模型。第 4 节才在 CPU 上初始化一个随机小模型，执行真实前向与数值比较；不下载权重、不训练、不评价文字质量。GPU 性能和已有 checkpoint 都不是本日学习条件。可按“概念与例子 30 分钟、源码带读 25 分钟、CPU 探查与交流 25 分钟”安排。
 
 ## 当天的流程阅读
 
@@ -30,147 +30,182 @@ knowledge_scope: W1 D5 预分配缓存生命周期与状态探查
 
 **读完能解释**：处理完整提示和随后每次新增一个词元时，输入形状及缓存状态分别怎样变化？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
-## 当日脚本与产物清单
+## 1. 缓存究竟替代了哪部分计算
 
-所有项目内路径均以 nanochat 项目根目录为基准；外部 MiniMind 只读历史证据不改名。`dNN_` 表示全程首次使用或产生日，跨日复用不改前缀；上游源码和测试保留原生名称。
+设提示包含 8 个 token，位置编号为 0–7。先不考虑提前结束与工具调用，假设之后依次生成 a、b、c；这只是用于追踪位置的符号，不是要求你运行生成。
 
-| 角色与脚本 | 用途与执行阶段 | 输入路径或来源 | 运行条件 |
+无缓存时，预测 a 需要处理位置 0–7；预测 b 时重新输入“提示+a”，处理位置 0–8；预测 c 时再处理位置 0–9。因果注意力不允许旧位置看未来，因此固定模型与输入后，新增 a 不会改变旧位置各层已经算出的 K/V。可以保存这些历史结果，下次只计算新位置。
+
+<abbr title="KV Cache / Key-Value Cache · 为每一层保存已处理位置的注意力 Key 和 Value。它是本次请求的运行状态，与可学习的模型参数不同。">KV Cache</abbr> 中，K 用于和新 query 计算匹配分数，V 是按注意力权重汇总的内容。每一步的新 Q 仍须计算；新位置仍会执行各层注意力与 MLP，且通常仍需读取可见历史 K/V。缓存减少历史位置的重复计算，不意味着下一步只做一次查表，也不意味着整次请求的内存更少。
+
+| 状态 | 本项目放在哪里 | 下次有什么用 |
+|---|---|---|
+| 各层已处理位置的 K/V | `KVCache.k_cache`、`v_cache` | 参与新位置的注意力计算 |
+| 每行已经处理的长度 | `cache_seqlens` | 决定新 K/V 的写入位置和有效范围 |
+| 前一位置的归一化词嵌入 | `prev_embedding` | 衔接本项目的 smear 计算，见第 3 节 |
+| token ID 历史 | Engine 的 `RowState.current_tokens` | 记录输出与工具状态；不在 K/V 张量中 |
+| 模型权重 | `GPT` 的参数 | 各请求共享；缓存更新不会训练这些参数 |
+
+缓存不保存全部旧 Q、全部 logits 或整个注意力分数矩阵。新请求必须建立自己的有效历史，不能直接把上一个请求的有效长度沿用过去。
+
+### 1.1 先分清“分配了多少”与“已经写入多少”
+
+沿用小模型 `L=2、Hq=4、Hkv=2、C=64`，每个头的维度 `Dh=C/Hq=16`。K 和 V 各有一个 `[L,B,Tmax,Hkv,Dh]` 张量：层、样本行、容量、K/V 头、头内维度。这里按 Hkv 分配，不能用 Q 的头数 Hq 代替。
+
+假设容量 Tmax=12，位置长度为 8，则 `[0:8]` 是有效历史，`[8:12]` 只是预留空间。Python 切片右端不包含在内，`[0:8]` 对应位置 0–7。这解释了为什么“cache shape 没变”和“已处理长度增加”可以同时成立。
+
+## 2. 用 P=8、B=4、G=3 推演 Engine 的两次分配
+
+P 是提示 token 数，B 是同一提示的采样行数，G 是最多产出的 token 列数。B=4 不是四个不同用户的请求；当前 Engine 先只处理一次共同提示，再复制出四条生成分支。
+
+<abbr title="prefill · 一次输入完整提示，建立历史 K/V，并从最后位置的 logits 得到第一个生成 token 的分数。">prefill</abbr> 和 <abbr title="decode · 复用历史状态，输入新 token，计算下一 token 的分数。这里使用每步一个 token 的增量路径。">decode</abbr> 的区别首先是输入与历史状态不同。跟着 [Engine.generate](../../../../nanochat/engine.py) 的这段摘录走；省略了分配参数与采样设置：
+
+```python
+logits = self.model.forward(ids, kv_cache=kv_cache_prefill)
+logits = logits[:, -1, :].expand(num_samples, -1)
+# ... 创建更大的 kv_cache_decode ...
+kv_cache_decode.prefill(kv_cache_prefill)
+```
+
+第一行的 `ids` 为 `[1,8]`。前向处理提示的八个位置，输出 `[1,8,Vocab]`；第二行只取最后位置的预测分数，再扩成 `[4,Vocab]`。四行此时共享同一分布，随机采样后可以得到不同 token；扩展 logits 不等于把一个已经采好的 token 复制四次。
+
+| 时刻 | 本次模型输入 | K/V 本体形状（K、V 各一份） | 有效位置与下一次写入点 |
 |---|---|---|---|
-| 跨日复用：[`.agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py`](scripts/d04_probe_model_and_cache.py) | 第 3 节 `--mode cache` 验证位置、数值、复制和 reset | `nanochat/gpt.py`、`nanochat/engine.py`、`nanochat/flash_attention.py`；内部使用同一随机模型与前缀 | 与 D4 相同；首次使用日为 d04，保留脚本名前缀 |
+| 创建提示缓存 | 尚无 | `[2,1,8,2,16]` | 长度 0 |
+| 提示前向结束 | `[1,8]` | `[2,1,8,2,16]` | 长度 8；有效 0–7 |
+| 创建生成缓存并复制 | 无新增前向 | `[2,4,11,2,16]` | 四行长度均为 8；复制有效 0–7 |
+| 产出第一列 a | 只采样并 `yield` | 同上 | 仍为 8；a 尚未送入模型 |
+| 恢复后处理 a，产出 b | `[4,1]` | 同上 | a 写在位置 8，长度变 9 |
+| 恢复后处理 b，产出 c | `[4,1]` | 同上 | b 写在位置 9，长度变 10 |
 
-| 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/results/w1/d05_cache_probe.json` | 缓存位置、误差、复制/reset 检查 | `d04_probe_model_and_cache.py --mode cache` | 条件生成：导入和全部断言成功后自动写入；产物首次属于 d05 |
-| `experiments/inference_infra/reports/d05_cache_path.md` | 缓存生命周期与容量公式 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d05_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
+表中 a/b/c 表示各行对应的输出，四行具体 ID 可以不同。生成缓存容量是 `P+G=11`，产出 c 时只有 10 个位置已处理。**“已经返回给调用者”与“已经输入模型并写入缓存”是两件事。**
 
-清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
+`KVCache.prefill(other)` 名字相同，但它只做状态复制；真正的提示计算在上面的 `model.forward`。复制时 `[L,1,P,Hkv,Dh]` 会广播到 B 行，并复制长度与 `prev_embedding`。目标缓存须为空、容量须至少容纳源缓存容量，相关维度也必须匹配。`get_layer_cache(i)` 返回本层的视图 `[B,Tmax,Hkv,Dh]`，后端向视图写入就是更新原缓存。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d05_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+生成器在 `yield` 暂停；再次 `next()` 才继续。当前实现恢复后先处理刚产出的 token，随后在下一圈顶部检查上限。因此若调用者继续迭代直到自然结束，产出 c 后还会处理 c、把长度推进到 11，却不再产出第四列；若调用者取到三列就停止恢复，则不会发生这次前向。D7 会用这一边界解释计时差异，今天只需把它与缓存位置对应起来。
 
-## 1. 先读缓存容器，不先读采样循环
+## 3. 沿着一个新位置，带读源码里的三种状态更新
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+### 3.1 RoPE 读位置，attention 写 K/V，最后一层推进长度
+
+现在缓存长度为 8，输入 a 的形状为 `[4,1]`。[GPT.forward](../../../../nanochat/gpt.py) 先读取位置，再切取 <abbr title="RoPE / Rotary Position Embedding · 旋转位置编码。模型按绝对位置选取旋转参数，作用到 Q/K，使匹配分数包含相对位置信息。缓存解码必须接着历史位置编号。">RoPE</abbr> 参数：
+
+```python
+T0 = 0 if kv_cache is None else kv_cache.get_pos()
+cos_sin = self.cos[:, T0:T0+T], self.sin[:, T0:T0+T]
+```
+
+此时 T0=8、T=1，所以使用 `[8:9]`，不能再使用位置 0。随后每一层根据本层输入计算 Q/K/V；K 已经过旋转、归一化和缩放，V 也可能混入 value embedding，再交给后端缓存。缓存保存的是这些已加工的本层 K/V，不是原始 token embedding。
+
+[SDPA 缓存分支](../../../../nanochat/flash_attention.py) 将新 K/V 写到 `[:,8:9]`，注意力读取有效范围 `[:,0:9]`。它只负责读写，不推进全局长度。[CausalSelfAttention.forward](../../../../nanochat/gpt.py) 最后才执行：
+
+```python
+if self.layer_idx == kv_cache.n_layers - 1:
+    kv_cache.advance(T)
+```
+
+两层都必须处理同一个位置 8。如果第一层提前推进，第二层便可能把同一个 a 当成位置 9，形成跨层错位。因此一次模型前向只推进一次，结束后四行长度均为 9。当前 `get_pos()` 和 SDPA 路径都读第一行长度，前提是批内位置一致，不能据此声称已支持各行不同长度的任意请求批处理。
+
+### 3.2 为什么除了 K/V 还需要 prev_embedding
+
+本项目有 <abbr title="smear · 将前一 token 的归一化词嵌入按门控系数混入当前位置，让当前输入带有邻近 token 信息。其参数属于模型，prev_embedding 是请求状态。">smear</abbr>：记归一化词嵌入为 e，位置 i 的输入会混入 `gate(e_i) * e_(i-1)`。完整前缀一次输入时，相邻两份 embedding 都在张量里；单 token 解码时，上一位置已不在当前输入里，需要额外保存。
+
+在 `GPT.forward` 中，先执行下面两行，然后才对 x 做 smear：
+
+```python
+x_pre_smear = kv_cache.prev_embedding
+kv_cache.prev_embedding = x[:, -1:, :]
+```
+
+提示前向结束后，`prev_embedding` 保存位置 7 的**归一化、尚未 smear 的词嵌入**，形状 `[1,1,64]`；复制后为 `[4,1,64]`。处理位置 8 的 a 时，先取旧状态 e7，再保存 e8，随后用 e7 补足跨调用的邻接关系。它不是最后一层隐状态，也不是 K/V 的别名。
+
+如果只复制 K/V 而漏掉这份状态，位置 8 的 smear 会缺少 e7，后续 logits 就可能偏离完整前缀计算。若 `smear_lambda=0`，错误可能暂时不影响输出；探查脚本将它设为非零，避免这种错误被默认值掩盖。
+
+### 3.3 reset 的语义是“历史无效”，不是“内存清零”
+
+`KVCache.reset()` 只把长度归零、`prev_embedding` 设为 None，旧 K/V 数值仍在原内存中。下一个请求必须从位置 0 重建有效前缀，读历史时不能越过有效范围。reset 能复用分配过的空间，但“reset 字段正确”本身还不证明第二个请求的数值正确，后者需要专门的复用前后数值测试。
+
+## 4. CPU 实操：用完整前缀作为数值对照
+
+这里实际执行模型前向；使用随机初始化的小模型，开启推理模式，没有反向传播或优化器更新。脚本主动隐藏 CUDA、指定 FP32，不调用 Engine 的 tokenizer 或下载 checkpoint。运行前先预测：四次前向的输入长度应为 8、1、1、1，缓存长度应依次到 8、9、10、11。
+
+复用 [D4 模型与缓存探查脚本](scripts/d04_probe_model_and_cache.py)。终端沿用已激活的 `nanochat` 环境。花括号内的输出局部追加到日志，不接管终端提示符；旧版全局日志重定向仍在运行时需先新开终端。退出码在命令后立即保存：
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
 {
-sed -n '80,155p' nanochat/engine.py
-rg -n 'kv_cache.advance|prev_embedding|T0 =|flash_attn_with_kvcache' nanochat/gpt.py
-} > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
-```
-
-<abbr title="KV Cache / Key-Value Cache · 每层保存已处理位置的注意力 Key/Value。nanochat 预先分配容量，用位置向量区分有效前缀和未使用区域；分配容量不等于有效长度。">KV Cache</abbr> 的两块本体形状均为 `[L,B,Tmax,Hkv,Dh]`。逐项确认：
-
-- `get_layer_cache(i)` 返回去掉层轴的视图 `[B,Tmax,Hkv,Dh]`，不是复制一份新缓存。
-- `cache_seqlens` 为每行一个 int32 位置；当前 `get_pos()` 只读第一行，因此一般使用假设是批内位置一致。
-- `advance(T)` 只更新位置，不负责写 K/V。
-- K/V 写入发生在 attention 后端；位置只在最后一个模型层处理后推进一次，不能每层都加 T。
-- `reset()` 清空位置、把 `prev_embedding` 设为 None，**没有把 K/V 存储全部置零**。旧数值仍可能存在，但正确实现不应读有效长度外的区域。
-
-<abbr title="prev_embedding · 缓存的前一 token 归一化 embedding，形状通常为 [B,1,C]。它供下一步 smear 使用，不是 Key 或 Value 的别名。仅拷贝 K/V 而漏掉它，会破坏当前模型的增量推理状态。">prev_embedding</abbr> 是今天最容易漏掉的状态。交流时需单独说明其来源、更新与复制。
-
-## 2. 对照 Engine.generate 的两次分配
-
-```bash
-{
-sed -n '195,310p' nanochat/engine.py
-sed -n '470,535p' nanochat/gpt.py
-} > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
-```
-
-对照下面 `P=8,B=4,G=4` 的时间线，确认每步状态，可直接口述：
-
-| 阶段 | 输入与缓存 | 位置与状态 |
-|---|---|---|
-| 起始 | token ID 列表长度 P | 尚无缓存 |
-| prefill 分配 | `[L,1,P,Hkv,Dh]` | 位置 0，prev 为 None |
-| prefill forward | `[1,P]` | 所有层写入；位置变 P；prev 为 `[1,1,C]` |
-| decode 分配 | `[L,B,P+G,Hkv,Dh]` | 新缓存位置 0 |
-| `prefill(other)` | 广播复制有效 K/V 前缀 | 每行位置 P；prev expand 后 clone |
-| 第一次采样/yield | prefill 最后 logits 扩到 B 行 | 第一 token 的分数来自 prefill |
-| 下次恢复生成器 | `[B,1]` forward | 写入位置 P；随后变 P+1 |
-
-<abbr title="prefill · 把完整 prompt 一次送入模型，建立各层历史缓存；它提供第一生成 token 的分数。nanochat 先做 batch=1 prefill，再复制给多行样本。">prefill</abbr> 与 <abbr title="decode · 利用已经建立的历史状态，每次只输入一个新 token 并得到下一个位置的分数。与每步重算整个前缀的无缓存路径相比，模型输入长度通常为 1。">decode</abbr> 是输入长度不同的两段计算。
-
-`yield` 会暂停函数：拿到第一列 token 时，下方下一次 forward 尚未发生。再次 `next()` 才恢复。当前循环在 `yield` 后先做下一次 forward，下一圈顶部才检查 token 上限；因此取完指定列后再尝试 `next()` 以发现结束，可能还执行一次未产出 token 的 forward。D7 审计必须讨论这个边界。
-
-## 3. 用随机模型检查状态和数值
-
-使用与 D4 同一份[模型与缓存探查脚本](scripts/d04_probe_model_and_cache.py)：
-
-```bash
-{
+python -c 'import sys; print(sys.executable)'
 python .agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py --mode cache --prompt-tokens 8 --decode-steps 4
+d05_status=$?
+printf 'cache_probe_exit=%s\n' "$d05_status"
+(exit "$d05_status")
 } > >(tee -a experiments/inference_infra/reports/d05_checks.log) 2>&1
 ```
 
-默认写 `experiments/inference_infra/results/w1/d05_cache_probe.json`。脚本直接调用 `GPT.forward(...,kv_cache=...)`，这样把缓存数值验证与 Engine 的结束 token/工具状态机分开。它做：
+脚本的缓存与对照路径共享**同一份模型权重和相同前缀**：缓存路径只输入新增 token，对照路径每次输入完整前缀；两者都取最后位置的 <abbr title="logits · 模型为词表每个 token 输出的预测分数。比较整组 logits 比只比较分数最大的位置更严格；此处仍只检验每次前向的最后位置。">logits</abbr> 比较。第 0 步输入提示，随后从缓存结果取分数最大的 ID，同时加到两条路径的前缀上。若使用两个独立随机模型或让两条路径自行随机采样不同 ID，就不再是缓存等价性对照。
 
-1. 以 P=8 prefill；比较缓存与无缓存最后位置 logits。
-2. 根据同一 greedy token 共同扩展前缀，再比较 3 步单 token 输入。
-3. 每步断言缓存位置等于已喂入的总前缀长度，并保存 before/after、误差和 greedy token。
-4. 把已建立缓存复制到 batch=4；检查每行各层有效 K/V 与 `prev_embedding` 相同。
-5. reset 后检查位置为 0、prev 为 None。
+| JSON 字段/输出 | 默认参数下应怎样理解 |
+|---|---|
+| `steps[0]` | `input_tokens=8`、`cache_before=0`、`cache_after=8`；这是 prefill |
+| `steps[1:4]` | 输入长度均为 1；位置为 8→9、9→10、10→11；共三次 decode |
+| `cache_seqlens` | 当前只有一行；应与 `cache_after` 相同 |
+| `prev_embedding_shape` | `[1,1,64]`，用于下一次跨调用的 smear |
+| `max_abs_logit_diff` | 与完整前缀路径的最大绝对分数差；还须结合 assert_close 的相对容差判断 |
+| `replication_position` | 11；本脚本在四步结束后才复制，不是 Engine 在提示结束的 8 处复制 |
+| `replication_batch`、K/V shape | 4、`[2,4,64,2,16]`；脚本固定容量 64，不使用上例的 Engine 容量 11 |
+| `reset_verified` | 长度归零且 prev 为 None；不表示 K/V 已清零或复用请求已完成数值验证 |
 
-<abbr title="greedy decoding · 每步选取分数最大的 token。避免随机采样差异干扰缓存数值对照，但不能取代所有数值容差检查。">greedy</abbr> 相同与 `assert_close` 都必须通过。当前脚本容差为 `atol=1e-5,rtol=1e-4`，只用于这份 CPU/FP32 smoke；不能未经验证套用到 bf16 或 GPU。
+脚本用 `torch.testing.assert_close(atol=1e-5,rtol=1e-4)` 检查末位置全部 logits，并另查 <abbr title="greedy · 每步选取 logits 最大的 token。两个路径选出同一 ID 只说明最大分数位置一致，不能证明所有分数或缓存状态都正确。">greedy</abbr> ID 一致。同一个最大 ID 可以对应差别很大的分数向量，所以只展示 token 一致不足以证明缓存正确。脚本还逐行比较复制后的有效 K/V 和 prev；这些是补充的状态证据，并未逐位置验证缓存与独立参考 K/V 完全相同。
 
-结构预期如下，实际误差以运行 JSON 为准：
+成功时退出 0，并在全部断言后写 JSON。若有断言失败，不会写本次成功结果；旧同名 JSON 可能还在，须根据日志与时间辨认。step 0 起错先检查输入/权重/精度；step 0 对、step 1 起错优先看位置与 prev；只在复制后错再查广播和状态复制。不要靠放宽容差掩盖最早分歧。
 
-| step | 当前输入长度 | cache_before | cache_after |
-|---:|---:|---:|---:|
-| 0 | 8 | 0 | 8 |
-| 1 | 1 | 8 | 9 |
-| 2 | 1 | 9 | 10 |
-| 3 | 1 | 10 | 11 |
+### 4.1 从 shape 算存储，而不是从有效长度猜内存
 
-这里“四步”包含 prefill 这一步，不等于四次 decode。复制后 K/V shape 为 `[2,4,64,2,16]`，单份 K 或 V 为 65,536 字节，两者合计 131,072 字节，不包含模型、位置向量、prev 和临时张量。
+脚本目标缓存的两份 K/V 共占 `2×L×B×Tmax×Hkv×Dh×元素字节数`。代入 FP32 每元素 4 字节：`2×2×4×64×2×16×4 = 131072 字节 = 128 KiB`。对应 JSON 的 `storage_bytes_kv`，不包括模型权重、prev、位置向量或临时张量。
 
-编写时验证记录：Conda `nanochat` / torch 2.9.1+cpu 实测 4 步位置为 8、9、10、11；最大绝对 logits 差 `7.450580596923828e-09`，greedy token 一致；B=4 的 K/V 与 prev 复制、reset 均通过。这里只验证上述小配置，不外推 GPU、真实 checkpoint 或所有边界。
+把有效长度从 11 reset 到 0 不改变这个预分配量。把容量从 64 改成 32 才会使相同配置的 K/V 分配量减半；把 Q 头数代进去则会高估当前 GQA 缓存。CPU 这里讨论的是内存，不应称为实测显存或 GPU 性能结论。
 
-## 4. 当天自验证与交流问题及内存公式
+## 5. 当天自验证与交流问题
 
-按题号在聊天中回答即可，无需写报告。概念题说明理由或推导；实测题引用当天日志或 JSON 中支撑结论的片段，运行命令、退出码和证据路径提供一次即可。未执行的实测项标 `PENDING`；引用历史结果时注明日期与版本，不必为回答问题额外重跑实验。
+可直接在聊天按题号回答，概念题用推演，实操题引用本次 JSON 和日志即可。命令、解释器、退出码和证据路径只附一次；人工报告可选。不选择 GPU 扩展不形成欠账；CPU 未运行时如实说“尚未执行”，不能引用旧结果冒充本次结果。
 
-1. **容量与有效长度**：对 P=8、B=4、G=4，Engine 的 prefill cache 和 decode cache 各有多大、哪些位置有效？解释层视图中的 B/Tmax/Hkv/Dh 分别代表什么。
+1. **改变生成列数**：上面的 Engine 例子改为 G=4。提示结束时、产出第四列时、继续迭代到自然结束时，缓存容量与有效长度分别怎样？为什么输出列数不等于已输入的新 token 数？
 
-   **核对要点**：沿两次分配与复制给出具体 shape 和位置；区分当前输入长度、已处理长度与预分配容量，head 数采用 K/V 头数。
+   **核对要点**：从 yield/恢复顺序推导，不把产出的 token 立即视为缓存的一部分。
 
-2. **首 token 与恢复执行**：首次 yield 的 token 来自哪次 forward，此时它是否已经写入 cache？再次 next 时输入什么，位置怎样变化？
+2. **跟踪位置 8**：输入 a 时，RoPE 读哪个切片、每层 K/V 写哪个切片、注意力读到哪里、什么时候 advance？若每层各推进一次，第二层会错在哪里？
 
-   **核对要点**：按生成器执行顺序解释采样、yield 与下一次单 token forward；区分已经输出和已经喂入模型的 token。
+   **核对要点**：给出半开区间并把读位置、写缓存、推进长度串成顺序。
 
-3. **位置必须一致**：cache 位置为8时输入一个新 token，RoPE 使用哪段位置参数、K/V 写到哪里、何时推进长度？为什么每层都 advance 会出错？
+3. **丢失额外状态**：K/V 与长度复制正确，prev 却为 None，为什么仍可能使增量路径出错？smear 系数为零时测试通过又说明什么？
 
-   **核对要点**：把 GPT.forward、attention 写入和最后一层推进连成同一条位置链；给出具体区间，而非只说“位置加一”。
+   **核对要点**：说明 prev 的表示来源与读取/保存顺序，区分未触发错误和状态已正确。
 
-4. **K/V 之外的历史状态**：prev_embedding 保存的是什么时刻的表示，下一步怎样使用？若只复制 K/V 而漏掉它，会破坏什么计算？
+4. **解释本次证据**：选择 JSON 中一个 decode 步，说明两条路径输入的内容和长度为何不同但历史相同；用位置、logits 容差与 token 检查解释结果。再指出脚本的复制发生在何时，与 Engine 有什么差别。
 
-   **核对要点**：依据 smear 的读取/赋值顺序说明状态来源和作用，并解释为何非零 smear 的探查更容易暴露该问题。
+   **核对要点**：引用实际字段；仅 greedy 相同不够；脚本四步包含一次 prefill。
 
-5. **用真实探查检验等价**：选本次 JSON 中 prefill 后的一步，解释缓存与无缓存路径如何保持同一前缀，并用位置和 logits 差异判断结果。“四步”为什么不等于四次 decode？
+5. **复用与容量**：reset 后字节数为什么不变？若要进一步声称“第二个请求没有读到旧请求的状态”，当前 reset 断言还缺什么验证？
 
-   **核对要点**：引用所选 step 的 input_tokens、before/after 与误差，结合 assert_close 和 greedy 检查解释结论；失败则定位最早分歧，不只放宽容差。
+   **核对要点**：按分配量公式计算，提出与新缓存/完整前缀的数值对照，不要求当天再编写测试。
 
-6. **复制与重新使用的语义**：复制到 B=4 与 reset 分别改变哪些状态？为什么 reset 后位置为0并不意味着 K/V 内存已清零，也不代表“重用后的第二个请求”已经测过？
+## 6. 脚本、产物与回查入口
 
-   **核对要点**：结合 prefill/reset 代码和 replication/reset 断言，区分有效前缀复制、prev 状态与存储内容；明确当前探查的覆盖边界。
+以下均以项目根目录为基准；清单描述生成条件，不表示已经执行或生成。
 
-7. **计算实际缓存代价**：按复制后 L=2、B=4、Tmax=64、Hkv=2、Dh=16、FP32，推导两份 K/V 的字节数，并与 storage_bytes_kv 对照。若只减少有效长度而不重新分配，存储量会变吗？
+| 脚本及阶段 | 完整输入路径/来源 | 条件与作用 |
+|---|---|---|
+| [`.agents/docs/career_roadmap/w1/scripts/d04_probe_model_and_cache.py`](scripts/d04_probe_model_and_cache.py)，第 4 节 `--mode cache` | `nanochat/gpt.py`、`nanochat/engine.py`、`nanochat/flash_attention.py`；脚本内部随机前缀和同一随机模型 | CPU/dev 依赖齐备；不需 tokenizer、checkpoint 或 GPU；首次编号 d04 保留 |
 
-   **核对要点**：写清每个因子的来源和单位，区分理论分配量、有效前缀、模型/临时张量与总内存；结论限定为本次配置。
+| 完整项目相对路径 | 用途 | 生成者与条件 |
+|---|---|---|
+| `experiments/inference_infra/results/w1/d05_cache_probe.json` | 位置、末位置 logits 差、复制/reset 和存储量 | 第 4 节脚本导入与全部断言成功后自动写入；同名文件会覆盖 |
+| `experiments/inference_infra/reports/d05_checks.log` | 本次终端输出、退出码和错误 | 第 4 节命令组 `tee` 自动追加；仅打印的解释器信息也在此保存 |
+| `experiments/inference_infra/reports/d05_cache_path.md` | 自己整理缓存生命周期与容量公式 | 人工可选编写；聊天回答即可完成交流 |
 
-预分配 K/V 理论字节数：`2 * L * B * Tmax * Hkv * Dh * 每元素字节数`。有效 token 数 P 不应替代容量 Tmax 估算分配量。不要声称 KV Cache 降低总显存；它用额外状态换取后续少算历史。
+源码回查：[缓存容器与 Engine](../../../../nanochat/engine.py)、[GPT 的位置/smear/最后层推进](../../../../nanochat/gpt.py)、[后端 K/V 写入](../../../../nanochat/flash_attention.py)、[缓存容器与 Mock Engine 测试](../../../../tests/test_engine.py)。MockModel 只模拟 logits 和推进，不计算真实 K/V；不要把它的生成测试当作本日随机 GPT 的数值对照。
 
-## 5. 失败分流与当天验收
-
-- 依赖失败：回 D2；完成源码表也只能标静态阅读，运行仍 BLOCKED。
-- 位置错误：先检查推进是不是只在最后一层，以及是否误把采样次数当成已喂入 token 数。
-- step 0 对，step 1 起错：优先核对 RoPE 的偏移和 `prev_embedding`；不要只放宽容差。
-- 单行对，复制后错：检查批量广播、有效前缀和 prev 的复制。
-- 误差为零：可以是真结果，但还要看是否用了非零投影和 smear；脚本已避免默认零投影让测试失去区分力。
-
-验收：能讲清生命周期各阶段；掌握容量/有效长度差别；能解释 prev；保存真实 JSON 或阻塞原因；不把这份小探查当作 W9 全覆盖回归。交流附真实日期、commit、命令、结果路径、状态与下一步；用时可选。
+本日主线的完成依据是能解释状态推进并解读 CPU 对照结果。小配置通过不证明所有窗口、chunk、reset 后第二请求、真实权重或 GPU 路径均正确，也不要求为这些边界追加硬件实验。
 
 上一篇：[D4 模型形状](d04_model_shapes.md)。下一篇：[D6 后端路由](d06_attention_backends.md)。
