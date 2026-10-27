@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import sys
 
-
 ROOT = Path(__file__).resolve().parents[5]
 
 
@@ -28,11 +27,14 @@ def generate_columns(max_tokens, events):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tokens", type=int, default=3, help="number of yielded columns (>=1)")
+    parser.add_argument(
+        "--tokens", type=int, default=3, help="number of yielded columns (>=1)"
+    )
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "experiments/inference_infra/results/w1/d07_generator_trace.json",
+        default=ROOT
+        / "experiments/inference_infra/results/w1/d07_generator_trace.json",
     )
     args = parser.parse_args()
     if args.tokens < 1:
@@ -55,7 +57,11 @@ def main():
         try:
             column = next(generator)
         except StopIteration:
-            record = {"next_call": call_index, "outcome": "StopIteration", "events": events[start:]}
+            record = {
+                "next_call": call_index,
+                "outcome": "StopIteration",
+                "events": events[start:],
+            }
         else:
             record = {
                 "next_call": call_index,
@@ -64,10 +70,14 @@ def main():
                 "events": events[start:],
             }
         result["calls"].append(record)
-        print(f"next #{call_index}: {' -> '.join(record['events'])} => {record['outcome']}")
+        print(
+            f"next #{call_index}: {' -> '.join(record['events'])} => {record['outcome']}"
+        )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     print(f"Output: {args.output.resolve()}")
     return 0
 
