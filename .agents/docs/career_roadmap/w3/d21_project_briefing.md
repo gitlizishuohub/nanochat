@@ -1,15 +1,12 @@
 ---
 source_files:
   - nanochat/engine.py
-  - nanochat/gpt.py
-  - nanochat/checkpoint_manager.py
-  - nanochat/flash_attention.py
-  - scripts/infer_bench.py
-  - tests/test_engine.py
-  - tests/test_attention_fallback.py
+  - .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py
+  - .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py
+  - .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py
 doc_type: tutorial
 knowledge_role: supporting
-knowledge_scope: W3第7日实操与验收
+knowledge_scope: W3第7日学习与实践
 ---
 
 # W3 D7 · 三分钟介绍与证据图
@@ -26,144 +23,139 @@ knowledge_scope: W3第7日实操与验收
 
 **读完能解释**：能否从文本、分词、训练、权重、生成、评估讲到交付，并逐段指出已做、仅理解和仍待验证的部分？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
-## 开始前：固定终端和记录方式
+## 今天学什么，做到哪里算完成
 
-本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+今天把三周学习压缩成一段可追问、可查证的项目介绍，约 60–90 分钟。**不补训练、不补 GPU 测量**；MiniMind 历史材料有真实参与和证据时才加入。主线是用自己的话讲清一个机制、一项本人动作和证据范围。
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+前置是自己的简历初稿内容与 D20 复现入口；需要展示运行成果时再选真实 raw/CSV/audit。只有纸面推演就介绍理解与设计，不能照抄示例称已运行。介绍可直接在聊天完成，讲稿和图文件可选；缺少尚未执行的主线操作则如实说明，不靠日历自动打勾。
 
-```bash
-cd /home/lizishuo/_program_/Project/nanochat
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-{
-python -c "import sys; print(sys.executable)"
-git status --short
-} > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
-```
+## 1. 从“列技术名词”改成“讲一个判断过程”
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
+假设开场是“我学习了 Transformer、KV Cache、TTFT、P95”。听众知道你见过这些词，却不知道你理解了什么。把它改成一个具体问题：“同样生成四个 token，为什么有人报告整体吞吐，有人只报告后续解码吞吐？”
 
-本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
+用 P=8/G=4/B=1 的纸面过程回答：prefill 处理八个输入位置得到首个预测，之后三次输入生成 token 得到三个后续预测；所以四个输出对应三个后续间隔。首个等待 30ms、后续各 10ms 时，整体是 `4/0.060≈66.67 token/s`，后续部分是 `3/0.030=100 token/s`。两个分子和时间范围不同，数字不能直接比较。这些是假设数值。
 
-## 今天的目标（约 3 小时）
+再接本人动作：“我对照包装器的 `elapsed=sum(times)` 与有效计数，确认它采用包含首个等待的整体吞吐。”只有真正读懂时才这样说；若实际运行过，再补原始行与复算。这样听众能追问你的依据，而不是只检查名词定义。
 
-W3 收尾不以优化数字为目标，而是能展示一条从训练产物到可信测量的证据链。前置：昨天的复现入口、简历初稿内容（可在聊天）、矩阵状态和原始结果。<abbr title="Evidence chain · 证据链；每个叙述能回溯到具体输入、源码、执行日志和原始记录，而不是仅引用另一份总结。">证据链</abbr> 要让导师能判断你到底做到了哪一步，不要求没有 GPU 时编造 GPU 效果。
+## 2. 带读：如何把源码结论和运行结论接起来
 
-分配：30 分钟整理文件，40 分钟组织口述，30 分钟核对证据节点，30 分钟计时口述，30 分钟核查 W3 gate。
+按问题查看三处代码即可，不重读全仓库：
 
-## 第一步：准备口述提纲（文件骨架可选）
+| 要解释的问题 | 源码入口 | 能推出什么 |
+|---|---|---|
+| 首个输出怎样出现 | [Engine.generate](../../../../nanochat/engine.py) 的 prefill 与首个 yield | 首个预测来自提示末位置，后续复用缓存；这属于机制解释 |
+| 本次时间覆盖哪里 | [measure](../w2/scripts/d12_benchmark.py) 的首次 next、times、counts 与 close | 包装器的计时/计数定义；是否实际跑完须看 raw |
+| 一句统计怎样追证据 | [聚合工具](scripts/d13_aggregate.py) 的 metrics、groups 与 audit | 哪些行按什么定义纳入，汇总如何形成；不能独立证明 raw 的执行真实性 |
 
-若希望留讲稿文件，可选使用[材料准备脚本](scripts/d15_prepare_materials.py)，附上实际复现入口或自动统计；口述练习可跳过此材料脚本。无需今天发送任何邮件或联系他人。
+<abbr title="证据链 · 让一句结论能沿统计组、审计记录与原始运行追溯；每个节点都有真实来源和适用范围。">证据链</abbr>可以逆着走：一句结论 → CSV 的组和 run_ids → audit 的 file/line/run_id → raw 的输入、实际计数和时间 → 对应版本的源码。不要从汇总跳过原始行，也不要把源码描述当作已经执行的证明。
 
-```bash
-{
-python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
-  --kind briefing --output-dir experiments/inference_infra/reports/w3_briefing_v1 \
-  --evidence experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md \
-  --evidence experiments/inference_infra/results/summary/d19_baseline.csv
-} > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
-```
+例如“完成 CPU 随机模型测量链路核查”需要本人运行/复核动作、真实设备与模型类型、有效样本数和反查记录；“实现缓存优化并加速 X%”还需要本人修改、正确性验证和同条件对照。前一句有明确技术内容，也更符合当前学习范围。
 
-可直接按下列时间段练习口述并与我交流，不要求写讲稿；需要文件时才运行材料脚本并填写 `d21_project_briefing.md`。若未生成复现正文，先回第 20 日补齐实际复现入口，不能用口头声称代替。没有 d19_baseline.csv 时在清单保留缺失并在介绍时说“尚无实测基线”，不要把缺失读成零延迟。<abbr title="Baseline · 基线；后续优化前固定条件下的测量参照。没有原始样本和方法约定的单次数字不能充当可信基线。">baseline</abbr> 是后续变化的参照，不等于优于上游或完成优化。
+## 3. 把内容放进三分钟
 
-## 第二步：按时间段组织自然语言
+下面是组织方式，不是要求背诵的讲稿；内容按自己实际完成范围填写。
 
-0:00–0:30 用两句说清问题与本人贡献：“我从小模型训练复现转到推理基础设施，先关注缓存正确性和测量可信性。当前亲自完成/复核的是……”。根据实际参与情况选择动词，不把已有产物阅读说成从头实现。
+| 时间 | 讲什么 | 应展示的依据 |
+|---|---|---|
+| 0:00–0:30 | 一个具体问题与本人角色 | 阅读解释、运行复核或自己新增，动词明确 |
+| 0:30–1:15 | 用刚才的四 token 例子解释机制 | 纸面过程与真实代码位置，注明是假设 |
+| 1:15–2:15 | 讲一项真实核查：输入、方法、结果 | 若实际运行则展示 raw/统计；否则讲清推演和实验设计 |
+| 2:15–3:00 | 解释结论范围，选择一个下一步 | 针对真实缺口给可执行动作与成功判据 |
 
-0:30–1:15 展示 MiniMind 的一个真实证据，比如新进程恢复日志或 KV 一致性 CSV。说明 CPU、小模型、小数据的边界；归档已搬迁，演示前点开新路径，不能点击旧链接失败后口头宣称证据在别处。
+只有自己实际跑过相应实验，才可采用这类句式：“在 CPU 随机小模型上，我用固定 P/G/B 做重复生成，保留预热和正式行，并从 audit 反查有效样本。它支持该环境下的生成与测量契约检查；没有语言质量或 GPU 性能结论。”其中次数、设备和计数要从自己记录取，不借用教程维护者的临时验证。
 
-1:15–2:15 解释 nanochat 两条生成路径：GPT.generate 每步把完整历史重新前向；Engine.generate 先 batch1 prefill，再复制缓存到样本行并逐步 decode。解释 TTFT 计时含什么、有效 token 怎样计数、为什么要预热3次正式5次。没有真实 GPU结果就展示矩阵默认计划、CPU raw与自动统计，让证据本身说明当前阶段。
+下一步也应按资源和问题选择：还没解释清 raw，就先复算一条；已能复算，就检查一个失败或上下文边界；想研究性能且已有可比测量，再考虑 <abbr title="Profiler / 性能分析器 · 记录算子、调用和耗时事件以定位候选瓶颈；采样有额外开销，trace 时间不能直接混入普通基准。">profiler</abbr>。不自动把租卡、训练或某个内核优化排为必做。
 
-2:15–3:00 讲限制与下一步：“CPU契约不证明GPU性能；下一步在同模型同条件下补基线并采集 profiler，依据 trace 决定优化点”。<abbr title="Profiler / 性能分析器 · 记录算子、调用和耗时事件的工具；采样trace帮助定位候选瓶颈，其额外开销使采样耗时不能直接混入普通benchmark。">profiler</abbr> 是定位工具，尚未采样时不能预言已发现 RMSNorm 瓶颈。
+## 4. 用一张图检查有没有跳过证据
 
-## 第三步：制作一张能点击的证据图
-
-下面图形骨架可用于口述时逐节点核查；若选择整理讲稿，可加入其中；这是信息组织示例，节点不能自动表示已完成。用相邻文字为每个节点标记 `VERIFIED_CPU`、`PENDING_GPU` 或 `PLANNED`，再补实际产物链接。若 Markdown 阅读器不支持 Mermaid，保留节点表即可，不为此安装绘图库。
+图只组织关系，不表示全部节点已完成。每个节点在聊天说明“已运行复核 / 仅阅读推演 / 未选择的扩展”，并只引用实际存在的文件。图文件可选，阅读器不支持 Mermaid 时用下方表格说明即可。
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"lineColor":"#3b82f6","defaultLinkColor":"#3b82f6","primaryColor":"#123d57","primaryTextColor":"#ffffff","primaryBorderColor":"#7dd3fc","fontSize":"16px"},"themeCSS":".marker { fill: #3b82f6 !important; stroke: #3b82f6 !important; }","flowchart":{"curve":"linear","nodeSpacing":32,"rankSpacing":48,"wrappingWidth":240}}}%%
 flowchart TD
-    A[MiniMind 数据与训练] --> B[恢复和 KV 对照]
-    B --> C[nanochat 模型与输入契约]
-    C --> D[逐次 raw 记录]
-    D --> E[自动统计与审计]
-    E --> F[性能采样与优化]
+    A[模型与输入协议] --> B[生成控制流]
+    B --> C[逐次 raw 记录]
+    C --> D[统计与审计]
+    D --> E[复现入口]
+    E --> F[可选进一步实验]
     classDef default fill:#123d57,stroke:#7dd3fc,color:#ffffff,stroke-width:2px;
     linkStyle default stroke:#3b82f6,stroke-width:3px;
 ```
 
-在聊天逐节点说明，或可选在图下整理六行表：节点、状态、对应文件、该文件证明什么、不能证明什么。MiniMind 归档节点链接到真实归档报告；nanochat raw 节点链接到具体 JSONL；统计节点链接到 d19_baseline.csv/audit；最后的优化节点若未做就写 PLANNED，不链接空文件。
+| 节点 | 应能回答的检查问题 |
+|---|---|
+| 模型与输入协议 | 随机初始化还是加载权重？P/G/B 和 token 构造是什么？ |
+| 生成控制流 | prefill、缓存复制、yield 和下一次前向如何衔接？ |
+| raw | 本人实际执行/复核了哪些行，失败是否保留？ |
+| 统计与审计 | 哪些 run 纳入、预热和正式各多少，P95 用什么方法？ |
+| 复现入口 | 另一个终端能否按正文重测或重建统计？ |
+| 可选进一步实验 | 是否真的选择了；没有选择就不记每日欠账 |
 
-## 第四步：计时讲一遍，回答追问
+如果选择训练权重，再在模型节点补文本→tokenizer→训练→checkpoint 的来源；这条知识流程可以解释而未执行。<abbr title="SFT / Supervised Fine-Tuning · 用示范数据中的目标位置更新模型参数的监督微调；属于训练阶段，不是生成推理。">SFT</abbr> 与 RL 属于可选训练阶段，不能因知道位置就声称做过训练。MiniMind 归档只支持那个历史版本与本人核查范围，不自动替代 nanochat 当前记录。
 
-用手机或系统计时器口述，目标约三分钟。超过时间先删背景宣传，保留本人工作与证据边界。技术追问直接采用文末第3、4题：解释一处真实判断过程，并检查结论是否越过证据。
+## 5. 实际讲一遍，再按需生成讲稿
 
-此前已通过的 TTFT、有效 token 或 P95 定义不再整套重答；实际交流暴露哪个概念不清，再回到对应日期的题目补核。记录实际耗时与尚不能回答的追问，讲稿文件可选。
+用手机或系统计时器讲一遍，约三分钟；超时优先删背景和名词堆叠，保留问题、本人方法和证据范围。把实际耗时、口述要点和一个答不清的追问发在聊天即可。不要把教程时间表当成自己已经计时。
 
-## 第五步：执行 W3 gate
+想保留文件时才运行材料工具；它不执行模型、不发送消息：
 
-直接在聊天核对这四类状态；可选整理到 `experiments/inference_infra/reports/d21_w3_gate.md`：材料已完成、CPU已验证、GPU待执行、明确失败。检查简历初稿内容、复现正文、口述和 CSV 说法一致；没有把随机模型 CPU结果称成训练checkpoint GPU性能。
-
-```text
-简历初稿内容：聊天或可选文件路径、待本人补填项
-MiniMind证据：归档路径、核对范围、当前源码未复测边界
-nanochat最短入口：命令、模型来源、实际验证设备
-矩阵：可行/非法上下文/成功/失败/PENDING_GPU数量
-统计：raw路径、有效样本数、audit路径、未测项
-三分钟口述与证据节点：聊天或可选稿件/图路径、口述耗时、答不出的追问
-下一阶段：先补基线与trace；现实资源缺口及下一检查时间
+```bash
+cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports
+{
+python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
+  --kind briefing --output-dir experiments/inference_infra/reports/w3_briefing_v1 \
+  --evidence experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md
+D21_RC=$?
+printf 'briefing_materials_exit=%s\n' "$D21_RC"
+} > >(tee -a experiments/inference_infra/reports/d21_checks.log) 2>&1
 ```
 
-## 验收与进入下一周
+仅在实际完成 D20 正文后引用该 evidence；其他真实 raw/CSV 可另加参数。缺失会登记 `exists:false`，不是通过；材料脚本返回 0 也不证明口述完成。已有稿件会拒绝覆盖，继续编辑或用 v2。
 
-至少展示一个可信 CPU 闭环或明确依赖阻塞，以及 nanochat 可运行入口的实际检查；只有 GPU 数据真实存在时才展示 GPU基线。没有通过门槛的任务按总计划顺延，不能因计划进度自动打勾。导师邮件、外部发布和上传个人材料不属于今天默认执行内容；本日完成可追溯证据的三分钟介绍和问答即可，讲稿与证据图文件整理可选。
+## 6. 收尾时检查三份材料是否讲同一件事
+
+把简历、复现入口和口述放在一起核对：本人动词一致、模型与设备一致、样本数和统计范围一致、没有把推演写成实测。CPU 主线可以独立完成本周；GPU/训练扩展未选不标待补。已经选择但失败的操作如实保留失败，主线尚未执行也不冒充完成。
+
+不要求额外 gate 报告；聊天给出“已理解 / 已执行复核 / 尚未执行的主线 / 未选择的扩展”及证据即可。可选保存 `d21_w3_gate.md`。本日不包含导师邮件、公开发布或上传个人材料。
 
 ## 本日脚本与产物清单
 
-下列路径以项目根目录为基准；脚本编号保留首次使用日。外部历史归档与上游 checkpoint 原生文件名保留，按正文真实绝对路径或环境变量解析；不冒充项目新产物。<abbr title="条件生成：只有指定分支执行、前置文件满足且实际写入后，文件才算存在；清单中的目标路径本身不证明生成成功。">条件生成</abbr>须在验收时核对。只打印的检查统一进入本日 checks 日志，不另称生成报告。
+路径相对于项目根目录；材料和自动日志只有执行相应命令后生成。其他原始记录沿用首次生成日名称。
 
-| 脚本完整项目相对路径 | 用途 | 阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|---|
-| [.agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py](scripts/d15_prepare_materials.py) | 生成可编辑材料与文件哈希清单 | 第1步 | 正文 --evidence 指定的真实文件；允许缺失并登记 | Conda nanochat；新输出目录，无需 GPU |
+| 脚本完整路径 | 用途与输入 | 条件 |
+|---|---|---|
+| [.agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py](scripts/d15_prepare_materials.py) | 可选 briefing 骨架、真实 evidence 清单 | 标准库、新稿件目标；不运行模型 |
+| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 本日只读计时边界 | 复用已有 raw，不要求重测 |
+| [.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py](scripts/d13_aggregate.py) | 本日只读统计和 audit 逻辑 | 复用 D19 结果 |
 
-| 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/reports/d21_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
-| `experiments/inference_infra/reports/w3_briefing_v1/d21_project_briefing.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 选择材料脚本后自动生成；口述提纲文件可选 |
-| `experiments/inference_infra/reports/w3_briefing_v1/d21_briefing_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 选择材料脚本后自动生成；文件存在不等于结论通过 |
-| `experiments/inference_infra/reports/d21_w3_gate.md` | 周末四类状态与证据验收 | 第5步交流后自愿整理 | 可选人工笔记，聊天核对可替代 |
+| 产物完整路径 | 生成者 | 条件与含义 |
+|---|---|---|
+| `experiments/inference_infra/reports/d21_checks.log` | 局部命令组 tee | 输出、错误与退出码，不持续记录终端 |
+| `experiments/inference_infra/reports/w3_briefing_v1/d21_project_briefing.md` | 材料工具后本人编辑 | 可选；聊天口述要点可替代 |
+| `experiments/inference_infra/reports/w3_briefing_v1/d21_briefing_evidence_inventory.json` | 材料工具 | 文件存在性/指纹，不证明结论与口述完成 |
+| `experiments/inference_infra/reports/d21_w3_gate.md` | 本人自愿整理 | 可选收尾状态，聊天核对可替代 |
 
 ## 本日自验证与交流
 
-按题号在聊天中回答即可，预计交流约 15–25 分钟，不要求另写报告、讲稿或图文件。开头一次说明采用的证据日期/版本，历史归档与本次结果分别注明；实际复现入口仍需保留。口述要点与证据节点可直接发聊天，未执行写 `PENDING`，不为收尾补跑 GPU。
+1. 实际计时讲一遍，再给出口述要点与耗时。听众能否指出你研究的问题和本人做过的动作？
 
-1. 请实际计时做一遍约三分钟的项目介绍，再给出口述要点与耗时。听众能否分清你解决的问题、本人贡献、已验证结果和当前限制？
+   **核对要点**：自己的话、实际计时；没有运行证据就讲理解与设计，不编造排障经历或收益。
 
-   **核对要点**：使用自己的话组织内容，至少让一项技术结论有可展示的原始依据；没有收益数字时照实介绍已完成的验证工作。未计时就标待练，不能仅复制教程时间表称演示完成；讲稿文件可选。
+2. 从介绍里挑一句结论，沿“CSV→audit→raw→代码”反查。只有阅读结论时，明确链路在哪停止。
 
-2. 请沿“文本与 tokenizer → 训练 → checkpoint → 生成 → 测量与交付”讲清各阶段的输入输出，并指出证据链当前在哪里中断。
+   **核对要点**：文件、行号、run_id 与组对应；不只列路径，说明原始值为什么支持那句话。
 
-   **核对要点**：用聊天节点说明或已有图均可，已做节点能落到真实产物，未做节点标待验/计划；能把 SFT/RL 放在适当位置而不声称已执行。MiniMind 历史归档与 nanochat 当前工作分清，summary 能追到 raw/audit，流程箭头不代表全部完成。
+3. 听众问“所以你已经证明模型更强、GPU更快？”你如何根据现有证据回应？
 
-3. 从这三周实际遇到的问题中选一个，向听众说明：你最初怎样判断、什么证据改变或确认了判断、最后排除了什么但仍不能保证什么？
+   **核对要点**：区分机制理解、功能正确性、系统性能与能力评价，顺便检查简历与复现正文有没有越界用语。
 
-   **核对要点**：围绕一处真实错误、反常记录或核查发现讲出推理过程并定位证据；没有亲自排障经历可讲复核中发现的证据缺口，不能编造故障与修复。说明本人作用，避免用一串指标定义替代过程。
+4. 另一位同学明天接手，应先做哪个动作？给出入口、资源和可检查的成功判据。
 
-4. 假设听众追问“所以你已经证明 GPU 更快、模型更强了吗”，你会如何用现有材料回答？请顺手核查简历、复现入口和口述是否都守住同一边界。
+   **核对要点**：针对真实缺口选择一个动作；现有 CPU 资源也能推进，不泛说“继续优化”。
 
-   **核对要点**：根据真实设备、模型类型、样本与对照条件决定能说什么，区分缓存正确性、性能和能力评价；用材料中的一句原话举例检查，有冲突就给出改句。不能将 CPU/random、跳过的 GPU 测试或少量样本转成未验证的成绩。
+## 完成核对
 
-5. 如果明天把项目交给另一位同学继续，你会让他首先完成哪一个动作，拿什么结果回来才算推进了项目？
-
-   **核对要点**：给出一个优先事项及对应入口、必要资源和可检查结果，说明它针对哪条现有证据缺口；从已完成的复现正文能接续。需要性能优化时先有可比基线与定位证据，未采集 trace 不预言具体瓶颈，不能只交“继续优化”的口号。
-
-## 核对记录与完成标记
-
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
-
-- [ ] 输入条件与前一天产物已核实。
-- [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
-- [ ] 示例数值与真实结果已区分，失败和待测未删除。
-- [ ] 能说明本日证据证明什么、尚不能证明什么。
+- [ ] 能用具体例子和真实代码解释一项机制。
+- [ ] 三分钟介绍与简历、复现正文的事实范围一致。
+- [ ] 已执行、仅推演和未选扩展分清；材料整理不代替读者学习验收。
