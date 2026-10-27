@@ -1,15 +1,12 @@
 ---
 source_files:
-  - nanochat/engine.py
-  - nanochat/gpt.py
-  - nanochat/checkpoint_manager.py
-  - nanochat/flash_attention.py
-  - scripts/infer_bench.py
-  - tests/test_engine.py
-  - tests/test_attention_fallback.py
+  - .agents/docs/career_roadmap/w3/scripts/d20_reproduce_cpu.py
+  - .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py
+  - .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py
+  - .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py
 doc_type: tutorial
 knowledge_role: supporting
-knowledge_scope: W3第6日实操与验收
+knowledge_scope: W3第6日学习与实践
 ---
 
 # W3 D6 · 写出他人能执行的复现入口
@@ -26,140 +23,153 @@ knowledge_scope: W3第6日实操与验收
 
 **读完能解释**：一个同学拿到你的复现入口，还必须拿到哪些资产，才能运行同一模型并复核同一结果？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
-## 开始前：固定终端和记录方式
+## 今天学什么，做到哪里算完成
 
-本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+今天学习写一份别人能按步骤执行的复现入口，约 60–90 分钟。主线提供两条短路径：**重新运行 CPU 随机小模型**，以及**仅从保留的 raw 重建统计**。不训练、不要求 GPU、checkpoint 或外部分词器资产。
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+本日实际交付是 `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md` 的完整正文；它供他人操作，需要保存。额外实验报告仍可省略。要写已核查的命令、输入范围与成功判据，不能只生成模板就说完成。
+
+## 1. 为什么“执行成功”还不是“可以复现”
+
+假设你只写“运行 aggregate 就能得到表格”。新读者还不知道输入目录、文件名规则、用哪个 Python、输出到哪里、什么算成功，更无法找到一条有效样本。将这句话展开为：
+
+```text
+起点：仓库版本 + 已有可导入 torch 的环境（统计重建只需标准库）
+输入：明确的原始文件及模型/输入身份；或随机模型的完整参数
+动作：从进入目录开始的完整命令
+判据：退出码 + 实际记录计数/状态 + 可反查的有效样本
+边界：本次只验证 CPU/random，未测模型能力与 GPU 性能
+```
+
+<abbr title="复现 · 在明确输入、环境和方法下重新执行核查。重新测量的耗时会波动；对同一 raw 重建统计则应保留相同分组和有效样本选择。">复现</abbr>不是要求每次毫秒数相同。重新测量产生新的 session/run_id；已有 raw 的统计重建才使用原来的身份与样本。两者需要分别命名，不能用新数据替换旧证据后称“复现了旧结果”。
+
+## 2. 创建骨架，再填完整正文
+
+以下标准库工具只生成模板与证据清单，拒绝覆盖已有稿件。已有 `w3_reproduction_v1` 就继续编辑，或选择 v2；不为生成模板重写旧实验。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
-{
-python -c "import sys; print(sys.executable)"
-git status --short
-} > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
-```
-
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
-
-本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
-
-## 今天的目标与边界（约 2–3 小时）
-
-本日交付 `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md`，写清项目目的、模型来源、最短运行步骤和当前结果状态，让读者能从明确的前置条件独立复现。后续公开项目入口可引用该正文；本日先验证正文中的实际命令与文件。
-
-前置：W2 环境与模型记录、W3 原始日志和统计状态；此前人工报告可用聊天和自动记录替代。复现入口本身是供他人操作的实践材料，保留完整可执行命令，不额外附写实验报告。<abbr title="Quickstart · 最短复现步骤；从明确的起始环境开始，用最少命令得到可检查产物，不等于完整训练流程。">Quickstart</abbr> 必须写读者实际需要准备的条件，不能假定有你的个人 shell 变量或缓存。
-
-## 第一步：创建复现正文草稿
-
-使用[材料模板工具](scripts/d15_prepare_materials.py)，附上你实际拥有的证据。没有 d19_baseline.csv 时省略该 evidence，正文写待测。
-
-```bash
+mkdir -p experiments/inference_infra/reports
 {
 python .agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py \
-  --kind entry --output-dir experiments/inference_infra/reports/w3_reproduction_v1 \
-  --evidence experiments/inference_infra/results/summary/d19_baseline.csv \
-  --evidence experiments/inference_infra/d12_protocol.md
+  --kind entry --output-dir experiments/inference_infra/reports/w3_reproduction_v1
+D20_TEMPLATE_RC=$?
+printf 'template_exit=%s\n' "$D20_TEMPLATE_RC"
 } > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 ```
 
-`d12_protocol.md` 若未整理成文件，省略对应 evidence 参数，直接从此前聊天、矩阵和原始记录恢复真实条件，不为模板补写报告。打开生成的 `d20_reproduction_entry.md`，不要只留下方括号模板。脚本检查文件与哈希不检查内容真实性，`exists:false` 必须处理或作为缺口说明。写清项目目的是建立 nanochat 推理基线和后续受控优化验证，当前不是已完成自研模型或部署服务。
+有真实证据时可增加 `--evidence` 参数；没有就不填假路径。[工具](scripts/d15_prepare_materials.py)中的 `is_file` 与哈希只识别文件版本，不检查能力或作者身份。生成后需把下面两条路径、实际版本、日志位置和失败指引填入正文；方括号不是已验证结果。
 
-## 第二步：填硬件、模型和数据依赖
+## 3. 路径 A：从新终端重新运行 CPU 小模型
 
-逐项填写解释器路径、Python/PyTorch版本、CPU/GPU型号、内存/显存、compute dtype、后端、相关 commit。说明 checkpoint 来自 W2 哪一步，若是小数据 smoke 就明确不保证语言质量。随机模型只验证契约，不能写成训练产物；MiniMind 权重不兼容 nanochat。
+先核对环境：本机终端自动激活 nanochat 时不重复激活；`python` 当前应为 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。换机需替换仓库与解释器路径并参考 D02 准备依赖，不假定所有人都有这个绝对路径。此路径不使用旧终端里的 META、MODEL_TAG 或缓存根。
 
-<abbr title="Tokenizer · 分词器；把文本映射为模型词表中的token ID。词表大小相同不保证ID语义映射相同，复现必须匹配实际训练使用的tokenizer。">tokenizer</abbr> 是模型输入契约的一部分。说明 `NANOCHAT_BASE_DIR`、tokenizer 和 checkpoint 存放位置，尤其要标哪些文件不在 Git 中以及合法来源。此处不添加自动下载逻辑，不把用户私有数据或完整个人路径写进可公开材料。
-
-## 第三步：把最短命令写到可以逐行复制
-
-依次写：确认自动激活的解释器 → 进入项目 → 设置真实缓存根目录 → 检查 meta/权重 → matrix 默认计划 → 选 B 执行 → aggregate。直接链接[矩阵驱动](scripts/d16_matrix.py)、[统计审计](scripts/d13_aggregate.py)与[W2基准](../w2/scripts/d12_benchmark.py)，每条命令用真实运行过的参数。
-
-不要把整份训练脚本复制进复现正文。下载与训练不是今天短路径的默认步骤；在“从零准备”段引用 W2 指导，注明训练耗时/资源未知时仍待实测。GPU 不可用时提供 CPU 短输入命令并明确它证明什么，不要求读者先去租卡。
-
-复用并链接第 16–19 日的完整产物清单；新终端复测必须使用新目录和 `--artifact-day 20`，新产生的矩阵、case raw/log 使用 `d20_`，不能覆盖原证据。复测输出目录在聊天或本日检查日志中逐项给出完整路径。说明 `--execute` 才启动 benchmark，matrix 默认仅计划；说明 `PROCESS_OK` 与有效正式样本数是不同验收。
-
-## 第四步：用新终端核查独立性
-
-打开一个新终端，按正文从第一行开始，先执行无需 GPU 的路径。不要把旧终端里的 META、MODEL_TAG 等变量自动视为存在；缺变量应在正文加定义。<abbr title="Exit code · 进程退出码；0通常表示程序正常结束，非0表示失败，但0不替代实验有效性判断。">退出码</abbr> 与 stdout/stderr 一起记录。
-
-运行真实命令后记录解释器、起始目录、输入是否已缓存和新产物目录。若今天资源不允许重跑 GPU，只验证默认计划、--help、CPU路径，正文写“GPU执行入口已准备，尚未本日复测”。不能把代码检查称为 GPU 复现成功。
-
-最低复查可只运行帮助与以下 CPU 短输入；均由本日终端捕获检查输出。它会创建新的 CPU 记录，不覆盖第 17 日证据：
+用[复现脚本](scripts/d20_reproduce_cpu.py)运行固定的 P8/G4、B1/B4、seed=42、三次预热和五次正式测量。它为子进程固定 CPU float32 和两个线程环境变量为 1，使用当前 Python；只初始化并前向，不训练。以下目标必须尚不存在；重试时同步改成 attempt02 等新目录，脚本会拒绝覆盖或追加旧结果。
 
 ```bash
+cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports
 {
-python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py --help
-python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --help
-python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py \
-  --device cpu --random-model --prompt-tokens 32 --decode-tokens 8 --batch-size 1 \
-  --warmup 3 --repeats 5 --seed 42 \
-  --output experiments/inference_infra/results/raw/d20_p32_g8_b1_cpu_reproduction.jsonl
+python -c "import sys,torch; print(sys.executable); print(torch.__version__)"
+git rev-parse HEAD
+python .agents/docs/career_roadmap/w3/scripts/d20_reproduce_cpu.py \
+  --mode measure \
+  --raw-dir experiments/inference_infra/results/raw/w3_d20_attempt01 \
+  --summary-dir experiments/inference_infra/results/summary/w3_d20_attempt01
+D20_RC=$?
+printf 'reproduction_exit=%s\n' "$D20_RC"
 } > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
 ```
 
-## 第五步：请读者回答四个问题
+脚本依次调用 B1、B4 和聚合程序；每步 stdout/stderr 写独立日志，实际 argv、工作目录、退出码保存在 `d20_reproduction.json`。某个 benchmark 非零会停止后续步骤，保留已写 raw 和日志。`processes_ok` 只表示子进程均退出 0，仍须检查内容；中断时清单可能停在 started，不能读成成功。
 
-请读者直接按文末第1、2、4、5题检验正文是否交代清楚运行入口、外部资产、统计重建和失败恢复，不另做一套相同问答。
+成功判据：两个 benchmark 退出 0；每个 raw 一次 session、3 次预热和 5 次正式完整输出，B1 有效总数 4、B4 总数 16；聚合退出 0，通常两组，各 `n_valid=5`、`warmup_status=OK`、`conclusion_status=CPU_OR_RANDOM_CONTRACT`。按 D19 方法从 audit 反查一条原始记录。帮助能打开、目录已创建或只看最后一行输出都不够。
 
-自己暂代读者时，只看复现正文作答；必须依靠旧终端变量或作者临时解释才能回答的地方，回正文补齐。
+## 4. 路径 B：不运行模型，仅重建已有统计
 
-## 失败分流与验收
+已有 D17/D18 或 W2 raw 时，本日可以只验证这一条路径，明确写“统计重建已复查，新的测量命令尚未本次执行”。无需为写入口重复所有测量，尤其不要求 GPU 重测。
 
-正文太长时保留最短成功路径和失败入口，细节引用每日教程；不要删掉模型来源和失败限制。环境路径只适用本机时标明需要替换的项，不将本地绝对路径当普遍命令。模板中的待填项未完成就不能声称可由他人独立复现。
+下面是独立调用，不依赖路径 A 的终端变量。把 `--raw-dir` 替换为真实输入目录，输出另选全新目录。脚本不递归；复用 W2 上级 raw 时会读取其全部匹配文件，正文应列清范围，避免读者以为只输入 B1/B4 两份。
 
-验收：一份完整复现正文、一次新终端 CPU/离线检查记录、所有结果状态真实。下一天把这些证据压缩成三分钟介绍与一张证据图。
+```bash
+cd /home/lizishuo/_program_/Project/nanochat
+mkdir -p experiments/inference_infra/reports
+{
+python .agents/docs/career_roadmap/w3/scripts/d20_reproduce_cpu.py \
+  --mode rebuild \
+  --raw-dir experiments/inference_infra/results/raw/w3_cpu_attempt01 \
+  --summary-dir experiments/inference_infra/results/summary/w3_d20_rebuild01
+D20_REBUILD_RC=$?
+printf 'rebuild_exit=%s\n' "$D20_REBUILD_RC"
+} > >(tee -a experiments/inference_infra/reports/d20_checks.log) 2>&1
+```
+
+核对原汇总与新汇总的组身份、run_ids、纳入数量和数值；同一原始内容应可重建。audit 的绝对来源路径可能因搬迁变化，不能把路径变化当统计数值不一致。搬迁后以新 audit 追溯实际 raw，不留下只在作者机器有效的隐含路径。
+
+## 5. 带读依赖分支，解释为何无需训练资产
+
+[W2 基准 load](../w2/scripts/d12_benchmark.py)的 `args.random_model` 分支创建 `GPTConfig` 与 `ContractTokenizer`，不访问训练缓存；去掉该参数才走 checkpoint 加载。[聚合脚本](scripts/d13_aggregate.py)只读取 JSONL 并重算，完全不导入 torch。新复现脚本的 `mode` 分支只在 measure 模式启动 benchmark，rebuild 直接调用聚合；运行任一步之前登记 argv，结束后保存退出码。由代码而非猜测得出依赖：
+
+| 路径 | 必需输入 | 不应暗藏的条件 |
+|---|---|---|
+| CPU 随机模型重新测量 | 仓库源码、已有 torch 环境、完整参数 | 不依赖个人训练权重或外部 tokenizer |
+| 只重建统计 | 标准库 Python、原始文件、聚合脚本版本 | 不需要 GPU、torch 或旧终端变量 |
+| 可选训练权重测量 | 匹配权重/meta/tokenizer及固定身份 | 资源和设备另列，不代替 CPU 主线 |
+
+如确实选择最后一行，在单独小节补上实际 `NANOCHAT_BASE_DIR`、source/tag/step、配置和文件指纹。没有资产时省略这项，不回头要求补训练；MiniMind 权重不直接兼容。
+
+## 6. 把失败入口也写给读者
+
+- `import torch` 失败：核对解释器和 D02 环境；统计重建不受影响，不尝试训练解决。
+- `early_stop`、error 或非零退出：保留 log/raw，查结束规则或异常阶段，换新目录重试，不删失败行。
+- 无匹配 raw：核对实际目录、文件名与是否只有矩阵；不要生成空表冒充成功。
+- 重复 run_id 或坏 JSON：保留原件，查复制/写入问题；不能修改 ID 凑次数。
+
+最后只看自己写的入口，从新终端核查所选路径，记录实际执行范围。正文要让读者知道哪里需要替换、哪里停止和怎样判断；不依靠聊天临时补变量。无需上传或公开材料。
 
 ## 本日脚本与产物清单
 
-下列路径以项目根目录为基准；脚本编号保留首次使用日。外部历史归档与上游 checkpoint 原生文件名保留，按正文真实绝对路径或环境变量解析；不冒充项目新产物。<abbr title="条件生成：只有指定分支执行、前置文件满足且实际写入后，文件才算存在；清单中的目标路径本身不证明生成成功。">条件生成</abbr>须在验收时核对。只打印的检查统一进入本日 checks 日志，不另称生成报告。
+路径相对于项目根目录。attempt01/rebuild01 是本次尝试的明确目录；已有目标需更换新名称，只有选择并执行相应路径才生成。
 
-| 脚本完整项目相对路径 | 用途 | 阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|---|
-| [.agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py](scripts/d15_prepare_materials.py) | 生成可编辑材料与文件哈希清单 | 第1步 | 正文 --evidence 指定的真实文件；允许缺失并登记 | Conda nanochat；新输出目录，无需 GPU |
-| [.agents/docs/career_roadmap/w3/scripts/d16_matrix.py](scripts/d16_matrix.py) | 复用计划与显式执行入口 | 第3–4步 | 真实 META、模型 tag/step 与协议 | 只 --help 无需模型；生成计划需 meta；执行另需 checkpoint |
-| [.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py](scripts/d13_aggregate.py) | 复用统计入口 | 第3–4步 | 已有带 run_id 的原始 JSONL | 无原始行时不生成性能表 |
-| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 复用 CPU 或真实模型基准 | 第3–4步 | CPU随机夹具或已验收 checkpoint/tokenizer | CPU路径需 PyTorch；GPU路径需 CUDA |
+| 脚本完整路径 | 用途与输入 | 条件 |
+|---|---|---|
+| [.agents/docs/career_roadmap/w3/scripts/d15_prepare_materials.py](scripts/d15_prepare_materials.py) | 创建 entry 骨架、可选 evidence 指纹 | 标准库，新材料目标 |
+| [.agents/docs/career_roadmap/w3/scripts/d20_reproduce_cpu.py](scripts/d20_reproduce_cpu.py) | 固定 CPU 测量或已有 raw 重建；完整 argv 与退出码登记 | measure 需 torch，rebuild 只需标准库；新 summary 目标 |
+| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 路径 A：P8/G4，B1/B4 | CPU、已有 torch 环境，无训练 |
+| [.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py](scripts/d13_aggregate.py) | 两条路径的统计重建 | 标准库，实际 raw |
 
-| 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/results/raw/d20_p32_g8_b1_cpu_reproduction.jsonl` | 新终端 CPU 复查记录 | d12_benchmark.py | 条件生成；仅执行本日 CPU 命令且成功写入后存在 |
-| `experiments/inference_infra/reports/d20_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
-| `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md` | 本日可编辑材料正文 | d15_prepare_materials.py 对应 --kind | 自动生成骨架，人工完善与验收 |
-| `experiments/inference_infra/reports/w3_reproduction_v1/d20_entry_evidence_inventory.json` | 输入存在性、SHA-256及首次归属日 | d15_prepare_materials.py | 自动生成；文件存在不等于结论通过 |
+| 产物完整路径 | 生成者 | 条件与含义 |
+|---|---|---|
+| `experiments/inference_infra/reports/w3_reproduction_v1/d20_reproduction_entry.md` | 材料工具后本人完善 | 必需实践材料；完整命令、输入、判据及边界 |
+| `experiments/inference_infra/reports/w3_reproduction_v1/d20_entry_evidence_inventory.json` | 材料工具 | 文件指纹；不是内容验收 |
+| `experiments/inference_infra/results/raw/w3_d20_attempt01/d20_p8_g4_b1_random_cpu.jsonl`、`experiments/inference_infra/results/raw/w3_d20_attempt01/d20_p8_g4_b4_random_cpu.jsonl` | 路径 A 的 benchmark | 新测逐次记录；第二组仅前组退出 0 时运行 |
+| `experiments/inference_infra/results/summary/w3_d20_attempt01/d20_baseline.csv`、`experiments/inference_infra/results/summary/w3_d20_attempt01/d20_baseline_audit.jsonl` | 路径 A 聚合 | 两个 benchmark 均退出 0 后尝试生成 |
+| `experiments/inference_infra/results/summary/w3_d20_rebuild01/d20_rebuilt.csv`、`experiments/inference_infra/results/summary/w3_d20_rebuild01/d20_rebuilt_audit.jsonl` | 路径 B 聚合 | 已有 raw 的独立统计重建 |
+| `experiments/inference_infra/results/summary/w3_d20_attempt01/d20_reproduction.json`、`experiments/inference_infra/results/summary/w3_d20_rebuild01/d20_reproduction.json` | 复现脚本 | 对应路径的真实 argv、日志位置、子进程退出码；不是样本验收 |
+| `experiments/inference_infra/results/summary/w3_d20_attempt01/d20_b1.log`、`experiments/inference_infra/results/summary/w3_d20_attempt01/d20_b4.log`、`experiments/inference_infra/results/summary/w3_d20_attempt01/d20_aggregate.log` | 复现脚本子进程 | 实际启动对应步骤时生成，后续步骤可能因前步失败而未启动 |
+| `experiments/inference_infra/results/summary/w3_d20_rebuild01/d20_aggregate.log` | rebuild 子进程 | 统计重建日志 |
+| `experiments/inference_infra/reports/d20_checks.log` | 局部命令组 tee | 实际目录、版本、输出、错误和退出码 |
 
 ## 本日自验证与交流
 
-按题号在聊天中回答即可，预计交流约 15–25 分钟，不要求另写实验报告。本日的复现入口正文是实际交付材料，仍需完整填写并保存。开头一次说明正文路径与本日复查的日期/版本，后面复用关键日志和 raw；历史成功注明归属，未执行写 `PENDING`。不要求为问答补跑 GPU。
+1. 展示已填写入口。新读者能否仅凭正文找到起点、输入、命令、成功判据和限制？
 
-1. 请展示已经填写的复现入口。一个没看过本项目的人，能从正文知道项目现在做到了哪一步，并找到一条最短可执行路径吗？
+   **核对要点**：完整正文，不只是模板；亲自执行范围写实，没有暗藏旧终端变量。
 
-   **核对要点**：引用实际正文中目的/当前状态、起点、完整命令与成功判据的关键部分，不能只交模板或脚本名；没有 GPU 结果就明确 CPU 路径的作用。必要依赖和待填项不得藏在口头补充里，每日报告与讲稿仍可选。
+2. 路径 A 与 B 的“结果相同”分别指什么？session/run_id 和毫秒值应完全相同吗？
 
-2. 如果读者只有 Git 仓库，没有你的缓存目录，他缺少哪些资产？正文是否足以让他识别并准备匹配的一套？
+   **核对要点**：新测有新身份与时间波动；同 raw 重建应保留原身份、分组、样本选择与统计定义。
 
-   **核对要点**：围绕模型能否重建与正确编码说明权重、meta、tokenizer 的来源和身份固定方法；区分已训练 checkpoint 与随机夹具。指出不在 Git 的资产、读者须替换的本机路径和缺失时的停止点；清单 `exists/hash` 只识别文件，不能代替内容与加载验收。
+3. 如果同学只有标准库 Python 和保留的 raw，能做什么，不能做什么？
 
-3. 实际从新终端按正文执行到哪一步？有没有某个变量或前置条件只有旧终端里才存在？
+   **核对要点**：可重建统计，不可据此声称重新跑过模型；要新测先准备 torch，无需训练。
 
-   **核对要点**：附本次关键命令、退出码与输出，核对正文能自行定义缓存根、tag/step 和 META 等必要条件。只运行帮助、计划或 CPU 契约时如实限定；新结果使用独立目标且不覆盖旧证据，不能把旧日志称为本日 GPU 复现。
+4. 用一个实际或假设失败场景检验正文：读者能定位到日志/原始行并知道怎样恢复吗？
 
-4. 读者拿到你保留的 raw 后，能否只按正文重建同一统计结果，并反查一条有效样本？
+   **核对要点**：具体阶段与证据路径，保留失败、新尝试，不只写“环境问题请检查”。
 
-   **核对要点**：给出入口中的聚合命令、明确的输入范围与独立输出位置，实际数据可用时用 CSV/audit/run_id 对应一条记录。解释为何只给 summary 或 matrix 不够；没有测量数据时说明目前只能交付何种执行入口，不虚构 CSV。
+## 完成核对
 
-5. 假设读者说“命令结束了，但结果不符合成功判据”，你的入口能帮他找到下一步吗？用一个具体失败场景检验。
-
-   **核对要点**：任选缺资产、上下文拒绝、OOM、提前结束或样本不足，说明从哪份 log/raw/status 判断以及何时停止、怎样保留失败后重试；场景可以是假设，无需故意造错。正文有对应指引，不能靠作者临时补命令，也不把退出码为 0 当全部实验通过。
-
-## 核对记录与完成标记
-
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
-
-- [ ] 输入条件与前一天产物已核实。
-- [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
-- [ ] 示例数值与真实结果已区分，失败和待测未删除。
-- [ ] 能说明本日证据证明什么、尚不能证明什么。
+- [ ] 已保留可执行的复现正文，选定路径从新终端核查过。
+- [ ] 能从 raw 重建并反查统计，未执行的测量明确说明。
+- [ ] 训练权重/GPU只是可选分支，材料没有额外强制报告。

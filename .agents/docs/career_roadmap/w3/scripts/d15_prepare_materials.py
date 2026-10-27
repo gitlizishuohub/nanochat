@@ -43,14 +43,14 @@ compute dtype/实际注意力后端：[从 raw 填写]。
 
 ## 路径 A：重新运行 CPU 随机小模型
 
-[从 D20 教程复制完整、亲自核验的命令；包含 cd、解释器核对、NANOCHAT_DTYPE、线程数、新输出目录、d12_benchmark.py 全部参数以及退出码捕获]。
+[从 D20 教程复制完整、亲自核验的 d20_reproduce_cpu.py --mode measure 命令；包含 cd、解释器核对、新 raw/summary 目录和退出码捕获。脚本固定 CPU float32、单线程环境、P8/G4/B1与B4、seed42、三次预热与五次正式运行，实际 argv 保存在 d20_reproduction.json]。
 成功判据：每个 B 的 raw 有 3 条 warmup 和至少 5 条 measure，状态和实际 token 计数合格。
 随机初始化不是训练；该路径不需要 META、MODEL_TAG 或 NANOCHAT_BASE_DIR。
 
 ## 路径 B：仅从已有 raw 重建统计
 
 输入目录及包含文件：[填写明确范围，保留原文件名和内容，不混入重复 run_id]。
-[复制 d13_aggregate.py 的完整 --raw-dir/--output/--audit 命令，使用独立输出位置]。
+[复制 d20_reproduce_cpu.py --mode rebuild 的完整 --raw-dir/--summary-dir 命令，使用新输出目录；它只调用标准库聚合工具，不启动模型]。
 成功判据：核对分组、n_valid、warmup_status 和 audit 的 file/line/run_id；CPU_OR_RANDOM_CONTRACT 不自动保证样本充分。
 
 ## 结果与边界
