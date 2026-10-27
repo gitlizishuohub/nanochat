@@ -1,117 +1,256 @@
 ---
 source_files:
-  - nanochat/common.py
   - nanochat/tokenizer.py
   - nanochat/dataset.py
   - nanochat/dataloader.py
   - scripts/tok_train.py
   - scripts/tok_eval.py
   - scripts/base_train.py
-  - nanochat/checkpoint_manager.py
   - nanochat/gpt.py
-  - nanochat/engine.py
-  - scripts/infer_bench.py
   - nanochat/flash_attention.py
+  - .agents/docs/career_roadmap/w2/scripts/d09_prepare_toy.py
+  - .agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py
+source_symbols:
+  - RustBPETokenizer.encode
+  - _document_batches
+  - tokenizing_distributed_data_loader_with_state_bos_bestfit
+  - CausalSelfAttention.forward
+  - GPT.forward
 doc_type: tutorial
-knowledge_scope: W2第2天实操与验收
+knowledge_scope: W2 D2 从文本往返与装箱推导输入目标及 CPU 批次检查
 ---
 
-# W2 D2：逐项验证文本、token 与训练批次
+# W2 D2：从一段文字，推导出模型要预测的每一个目标
 
-前一天：[返回前一天](d08_data_prerequisites.md)；后一天：[继续下一天](d10_training_smoke.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
+模型吃的是整数 ID，不是汉字；训练时交给它的也不是一句话，而是“输入这一串 ID，预测下一串 ID”。今天沿着 **文字 → tokenizer → 文档装箱 → x/y 批次** 走一遍，学会判断数据是否忠实保留原文，以及监督目标有没有错位。
+
+**本日主线在 CPU 上完成，不需要 GPU、模型权重或已经训练过的 GPT。** 第 1–3 节是概念推演和源码带读，无需执行；第 4 节才是实际命令。没有现成 tokenizer 时，准备脚本会在 CPU 上从少量合成文本学习一份小词表，这是“训练分词器”，不会创建 GPT、反向传播或更新语言模型参数。本日没有 GPU 补做要求。
+
+前一天：[返回前一天](d08_data_prerequisites.md)；后一天：[继续下一天](d10_training_smoke.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。建议概念与源码约 35 分钟，CPU 检查约 20–30 分钟，交流约 15 分钟；时间是建议，不是完成记录。
 
 ## 当天的流程阅读
 
-先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+用约 10–20 分钟读下面指定的小节，再回到本文；阅读只需口述理解，不新增手写报告或实验产物。
 
 - **阅读入口**：[5.1 预训练：装满 T+1 然后 shift](../../llm-training-workflow/05-data-encoding-and-batching.md#reading-5-1)；[5.3 batch、epoch 和每卡分配](../../llm-training-workflow/05-data-encoding-and-batching.md#reading-5-3)。
-- **今天重点**：对照 round-trip 和真实 loader 批次，手工完成一次输入/目标错位，并分清每卡行数、序列长度与有效批量。
-- **暂时跳过**：5.2 的对话装箱留到 D15；多卡通信实现留到 D14 的概念预览。
+- **今天重点**：手工形成 x/y；理解一行数据可能装有多篇文档，因此“批次有几行”不等于“有几个句子”。
+- **暂时跳过**：5.2 的对话装箱留到 D15；多卡通信实现留到 D14。本日只解释理解批次所需的单位。
 
-**读完能解释**：给定一行 T+1 个词元，输入和目标如何形成？全局批量的单位为什么不能直接说成句子数？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+带着一个问题阅读：原始行为什么要比输入多一个 token？第 2 节会从具体数值推导答案。
 
-## 开始前：固定 shell 与结果位置
+## 1. 概念推演：往返成功到底证明了什么
 
-所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+### 1.1 字符、字节、token 是三种计数
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+<abbr title="tokenizer · 分词器。依据固定词表和编码规则，把文字转换为整数 ID，并把 ID 序列解码回文字。本文使用 RustBPETokenizer，词表由 rustbpe 学习，实际编码由 tiktoken 执行。">tokenizer</abbr> 可以把常见片段合成一个 <abbr title="token · 词元。对应词表内一个整数编号，可能表示一个字符、多个字符或一个字符的部分 UTF-8 字节。">token</abbr>。例如字符串 `A中` 有 2 个 Python 字符，UTF-8 编码为 4 字节：`41 E4 B8 AD`。具体分成几个 token 取决于词表：不能仅凭“两个字符”推算 token 数，也不能把这里的字节值当作本项目实际 token ID。
+
+假设一个教学词表把它编码为 `[17, 23, 24]`，三个 ID 分别表示字节片段 `41`、`E4 B8`、`AD`。单独解码后两个片段可能看不到完整的“中”，合起来才恢复完整字符。这里的 ID 和切分是**假设例子**，实际结果必须看你的 tokenizer。
+
+因此 <abbr title="round-trip · 往返验证。整段原文 encode 成 ID 序列，再 decode 成字符串，要求与原文逐字符相等；不要求每个 token 单独解码为完整字符。">round-trip</abbr> 要检查的是：
+
+```python
+ids = tok.encode(text)
+assert tok.decode(ids) == text
+```
+
+它排除这组输入上的文字丢失、替换或空白变化；它不证明切分效率高、词表适合整个语料，也不证明模型学会了语言。比如 Python 字符串 `"\n"` 是一个换行，而 `"\\n"` 是反斜杠和 n 两个普通字符；两者不相等，末尾两个空格也不能在比较前自行 `.strip()` 掉。
+
+### 1.2 BOS 是额外边界，不是原文里的字
+
+<abbr title="BOS / Beginning of Sequence · 序列起点标记。nanochat 将它显式加在每篇文档前面；实际 ID 必须通过 tokenizer 获取。">BOS</abbr> 让后续代码能辨认文档开始。以空字符串为例：普通编码得到 `[]`；显式添加 BOS 后得到 `[bos_id]`。标记是我们额外放进去的，比较原文时应剥去它，而不是要求带标记的全文解码等于空字符串。
+
+[nanochat/tokenizer.py](../../../../nanochat/tokenizer.py) 的 `RustBPETokenizer.encode` 中，这几句足以解释行为（原句摘录，省略无关分支）：
+
+```python
+ids = self.enc.encode_ordinary(text)
+if prepend is not None:
+    ids.insert(0, prepend_id)
+```
+
+先编码普通文字，再把指定的特殊 ID 插入第 0 位。`get_bos_token_id()` 返回当前词表的 BOS；更换词表后整数可能改变，不能硬编码。批量输入走 `encode_ordinary_batch`，再对每一行插入 BOS。检查脚本会比较“批量编码”与“逐条编码”的结果，避免只验证了其中一条接口。
+
+## 2. 概念推演：T+1 个位置怎样变成 T 个预测任务
+
+### 2.1 把一个具体行展开
+
+下面的数字只表示假设词表中的 ID，不需要加载模型。设 T=5，一行原始数据为：
+
+```text
+原始 row = [BOS, 11, 12, 13, 14, 15]  # 6 个位置
+输入 x   = [BOS, 11, 12, 13, 14]      # 前 5 个
+目标 y   = [ 11, 12, 13, 14, 15]      # 后 5 个
+```
+
+| 列（从 0 开始） | 当前输入 x | 该位置应预测的目标 y |
+|---|---|---|
+| 0 | BOS | 11 |
+| 1 | 11 | 12 |
+| 2 | 12 | 13 |
+| 3 | 13 | 14 |
+| 4 | 14 | 15 |
+
+所以输入 13 的位置要预测 14。最后的 15 不进入 x，却为最后一列提供目标；少准备它，最后一列就没有“下一个 token”可用。这正是 T+1 的原因。对齐后应满足 `x[1:] == y[:-1]`；若直接令 `y=x`，任务就变成抄写当前 token。
+
+B 表示批次的行数，T 表示每行输入长度；B=2、T=5 时，x/y 各为 `[2,5]`，共有 10 个预测位置。原始行总共要放 12 个 ID，模型训练的目标位置仍是 10 个。全局批量还要计入进程数和梯度累积次数；例如 1 个进程、累积 3 次上述批次，就对应一次更新中的 30 个目标 token，而不是“30 句话”。这里仅计算单位，不要求实际训练。
+
+### 2.2 y 已在内存里，模型会偷看答案吗
+
+这要区分两种 <abbr title="mask · 掩码。用于选择哪些位置可见或参与计算。注意力掩码限制信息流，损失掩码选择计入训练误差的位置，两者职责不同。">mask</abbr>：
+
+- **注意力掩码**：模型当前位置只能看见当前及之前的输入，不能看后面的答案。实际 `CausalSelfAttention.forward` 使用 `causal=True`；如果配置了滑动窗口，还会限制可见的历史范围。假设窗口覆盖全部历史，对上表第 2 列而言，可见的是 `[BOS,11,12]`，不是后面的 13、14。
+- **损失掩码**：选择哪些目标参与误差计算。`GPT.forward` 的交叉熵使用 `ignore_index=-1`，目标等于 -1 时才忽略。今天的预训练 loader 用合法词表 ID 填满目标，没有 padding，也不生成 -1 或单独的 mask 张量；所以各个目标位置都参与误差计算。
+
+[模型源码](../../../../nanochat/gpt.py) 中的关键原句是：
+
+```python
+y = flash_attn.flash_attn_func(q, k, v, causal=True, window_size=window_size)
+# 以下位于 GPT.forward 的损失分支，省略中间计算。
+loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
+```
+
+这里不要求读懂注意力算法或运行损失。你只需分清“看不见未来输入”和“哪些目标不计误差”是两件事。D15 对话训练中的助手输出选择属于后者，不要套用到今天的预训练 loader。
+
+## 3. 真实源码带读：文本怎样装满一行
+
+### 3.1 文件先决定 train 与 val
+
+[nanochat/dataset.py](../../../../nanochat/dataset.py) 的 `list_parquet_files()` 返回排序后的 parquet 路径。数据 loader 的 `_document_batches` 再执行：
+
+```python
+parquet_paths = parquet_paths[:-1] if split == "train" else parquet_paths[-1:]
+```
+
+最后一个文件属于 val，其余属于 train。故只有一个文件会让 train 为空，不是“它会自动从一份文件划分训练/验证”。这个迭代器会反复遍历数据；若 train 根本没有文件，调用者等不到 yield，会一直没有批次。CPU 检查脚本因此先要求至少两份文件，并检查第一 row group 的 `text` 列。
+
+### 3.2 先加 BOS，再选择能放入的文档
+
+[nanochat/dataloader.py](../../../../nanochat/dataloader.py) 的 `tokenizing_distributed_data_loader_with_state_bos_bestfit` 先设置 `row_capacity = T + 1`。`refill_buffer` 用这句把一组原文变成带 BOS 的文档 ID 列表：
+
+```python
+token_lists = tokenizer.encode(doc_batch, prepend=bos_token, num_threads=tokenizer_threads)
+```
+
+然后 <abbr title="Best-Fit Cropping · 尽量选择能完整放入剩余位置的最长文档；都放不下时，裁切缓冲区中最短文档的前缀填满。本文长度均包含显式 BOS。">best-fit</abbr> 在缓冲区找满足条件的最长文档：
+
+```python
+if doc_len <= remaining and doc_len > best_len:
+    best_idx = i
+    best_len = doc_len
+```
+
+例如还剩 5 个位置，候选长度为 3、5、8，就选择长度 5；不是取最先到来的长度 3。若还剩 2 个位置，候选最短也有 3 个，就走另一分支：
+
+```python
+shortest_idx = min(range(len(doc_buffer)), key=lambda i: len(doc_buffer[i]))
+doc = doc_buffer.pop(shortest_idx)
+row_buffer[row_idx, pos:pos + remaining] = torch.tensor(doc[:remaining], dtype=torch.long)
+```
+
+`pop` 取走整篇文档，只使用前 2 个 ID；剩余 1 个没有放回缓冲区。这解释了“没有 padding，位置全满”为什么仍可能丢弃数据。源码注释中的裁切比例依赖语料、长度与配置，不能当作你今天数据的实测值。
+
+一行也可能装下多篇文档，例如 `[BOS,11,12,BOS,21,22]`。切片后目标里会出现中间的 BOS；它仍是合法预测目标。**BOS 提供边界标记，不会自行构造跨文档注意力隔离**；今天的 loader 也没有返回一张按文档分块的注意力 mask。
+
+### 3.3 最后才把原始行切为 x/y
+
+装满原始行后，真实代码执行：
+
+```python
+cpu_inputs.copy_(row_buffer[:, :-1])
+cpu_targets.copy_(row_buffer[:, 1:])
+```
+
+这就是第 2 节的“取前 T 个”和“取后 T 个”。函数随后将缓冲区复制到指定设备并 yield；包装函数 `tokenizing_distributed_data_loader_bos_bestfit` 省去恢复状态，只返回 x/y。虽然内部变量叫 `gpu_buffer`，指定 `device="cpu"` 时它实际也是 CPU 张量，名字不意味着要求 GPU。
+
+这些缓冲区会在下一轮复用；如需长期保存某一批用于逐元素比较，应先 clone，而不是只保留原张量引用。本日检查脚本在下一次迭代之前完成断言，并把 `first_ids` 转成普通列表保存。
+
+## 4. CPU 实际操作：把推演对应到真实结果
+
+### 4.1 确认解释器与日志位置
+
+所有命令从仓库根目录执行。终端已自动激活 nanochat，不重复激活。本日处理的 ID 张量是整数类型 `torch.long`，无需选择模型浮点精度。
+
+日志只记录 `{ ...; }` 命令组内部；Bash <abbr title="process substitution · 进程替换。这里把局部命令组的输出交给 tee，显示并追加日志；命令组结束后不再接管交互终端。">进程替换</abbr>不会持续记录提示符。复制完整花括号和末尾重定向；若旧终端曾启用全局重定向，先新开终端。每条关键命令后立即打印退出码，成功标准同时看状态、断言与退出码。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+mkdir -p experiments/inference_infra/reports
 {
 python -c "import sys; print(sys.executable); print(sys.version)"
+printf 'interpreter exit=%s\n' "$?"
 } > >(tee -a experiments/inference_infra/reports/d09_session.log) 2>&1
 ```
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
+预期解释器为 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。路径或依赖不符时先记录具体错误，不用系统 Python 替换后声称同一环境已通过。本页命令、帮助与检查的打印内容都保存在 `experiments/inference_infra/reports/d09_session.log`；日志追加写入，重跑时注明会话边界。
 
-本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d09_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
+### 4.2 二选一：复用已有数据，或生成学习用的小数据
 
-## 今日目标与时间盒
+先看 [D08 数据盘点](d08_data_prerequisites.md) 的结论。
 
-用 20 分钟准备数据，25 分钟做可逆编码检查，20 分钟检查训练批次，15 分钟自验证并交流。完成标志是有实际断言输出，或有明确错误与恢复方法。先读 [昨天的数据盘点](d08_data_prerequisites.md)，确认你选择 existing 还是 isolated-synthetic。
+**已有数据分支**：设置 `export NANOCHAT_BASE_DIR=你已核验的实际绝对路径`，直接进入 4.3。只使用自己生成或可信来源的 tokenizer；其中 `tokenizer.pkl` 的加载涉及 pickle，不从未知来源复制。
 
-## 第一步：没有数据时，创建独立的 smoke 数据
+**没有数据分支**：使用[隔离合成数据脚本](scripts/d09_prepare_toy.py)，不下载文件、不加载 GPT。它在 CPU 上为 1,200 条合成 train 文本学习小型 <abbr title="BPE / Byte Pair Encoding · 字节对编码。此实现从字节片段学习合并规则，用固定词表将后续文字编码成 ID；学习词表不涉及 GPT 参数。">BPE</abbr> 词表（请求词表大小 512），再生成 1,200 条不同模板的 val 文本及字节长度表。BPE 在这里学习哪些字节片段合并为一个 token；这就是命令内部的 `train_from_iterator`，不是语言模型训练。train/val 模板重复，只用于检查数据管线，不能证明语言质量。
 
-使用 [隔离合成数据脚本](scripts/d09_prepare_toy.py)。这个脚本不下载文件，不修改生产代码，不覆盖任何已存在的目标目录。以下路径仅供学习实验；若已存在，换一个新后缀，不能删除旧数据再重跑。
+`--base-dir` 必须是尚不存在的全新目录。示例目录已存在就换一个新后缀，并同步修改下面 export；不要覆盖或删除旧数据。
 
 ```bash
 {
-python .agents/docs/career_roadmap/w2/scripts/d09_prepare_toy.py --help
 python .agents/docs/career_roadmap/w2/scripts/d09_prepare_toy.py --base-dir /tmp/nanochat-w2-toy
-export NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy
-python .agents/docs/career_roadmap/w2/scripts/d08_data_check.py --output experiments/inference_infra/reports/d09_toy_inventory.json
+prepare_status=$?
+printf 'prepare exit=%s\n' "$prepare_status"
+if [ "$prepare_status" -eq 0 ]; then
+  export NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy
+  python .agents/docs/career_roadmap/w2/scripts/d08_data_check.py --output experiments/inference_infra/reports/d09_toy_inventory.json
+  printf 'inventory exit=%s\n' "$?"
+fi
 } > >(tee -a experiments/inference_infra/reports/d09_session.log) 2>&1
 ```
 
-脚本创建 1,200 条 train 和 1,200 条 val 合成句子、两份含 `text` 列的 parquet、本项目 RustBPETokenizer 训练产生的词表，以及准确的 token_bytes。`d09_synthetic_provenance.json` 记录来源。train 与 val 使用不同模板，但这种重复数据只用于功能 smoke，不能拿 val loss 评价真实语言能力。临时根目录重启后可能丢失；要长期保存可换到自己有权限的大数据盘路径，并在交流时说明。
+只有 prepare 成功才设置数据根并盘点；失败后先排查，不继续 4.3。`/tmp` 可能被系统清理；要长期保存可改用有权限的大数据盘。交流时给实际绝对路径，不能只写环境变量名。未设置变量时当前用户默认根是 `/home/lizishuo/.cache/nanochat`；本日无需往该默认根下载数据。当前数据目录是 `$NANOCHAT_BASE_DIR/base_data_climbmix/`，不存在时源码会回退到旧的 `$NANOCHAT_BASE_DIR/base_data/`，已有数据分支要记录实际使用的目录。
 
-**已有数据分支**：跳过准备命令，设置 `export NANOCHAT_BASE_DIR=你已核验的实际绝对路径`。不要把示例 `/tmp` 路径设置到真实数据实验上。
+### 4.3 先检查文字往返
 
-## 第二步：逐项验证 round-trip
-
-<abbr title="Round-trip · 往返验证。本文检查完整字符串经 encode 转为 token IDs 再 decode 后逐字符相等；不要求每个单独 token 都能解码为合法 UTF-8 字符。">round-trip</abbr> 的断言运行在 [真实 tokenizer 检查脚本](scripts/d09_roundtrip.py)：
+[真实 tokenizer 检查脚本](scripts/d09_roundtrip.py) 会加载选定根目录下的 tokenizer。运行前预测：空字符串会有几个普通 token？中英文混合或 emoji 的每个 token 都必须是完整字符吗？
 
 ```bash
 {
 python .agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py --output experiments/inference_infra/reports/d09_token_roundtrip.json
+printf 'tokenizer check exit=%s\n' "$?"
 } > >(tee -a experiments/inference_infra/reports/d09_session.log) 2>&1
 ```
 
-打开 JSON，确认 `status=ok` 且有六条 `cases`：英文、中英混合、换行与空白、数字、emoji 与重音字符、空字符串。逐条看 `text` 和 `token_ids`：token 数不等于汉字数，也不等于 UTF-8 字节数。空字符串普通 encode 应为空；加 BOS 后才有开头标记。脚本另外验证 batch encode 与逐条 encode 一致、九个特殊 token ID 不冲突、token_bytes 的长度等于实际词表大小且特殊 token 字节数为零。
+打开 JSON，按以下顺序解释结果：
 
-<abbr title="BOS / Beginning of Sequence · 序列起点标记。本文文档编码时由 prepend 显式添加；它的 ID 是 tokenizer 定义的特殊 ID，不应假定固定为某个整数。">BOS</abbr> 需要与普通文本区别处理：`decode(encode(text, prepend=bos))` 会包括特殊标记，因此脚本比较 `bos_ids[1:]`，不把标记当原文。
+1. `status=ok`、退出码为 0：所有内置断言通过，而不是“运行到了打印 JSON”。脚本捕获异常时同样会写 JSON，但状态为 error、退出码为 1。
+2. `cases` 有六组：英文、中英混合、换行与空白、数字、emoji/重音字符、空字符串。每组 `passed=true` 表示整段 encode→decode 相等；观察实际 `token_ids`，不与第 1 节假设 ID 比较。
+3. 脚本还检查带 BOS 时先去掉第一个 ID 再还原文字、批量与逐条编码一致、九个特殊 ID 互不冲突。
+4. `token_bytes_shape` 应覆盖实际词表；特殊 ID 的字节计数为零。这张表用于后续按原文字节计算指标；本日检查没有把所有普通 token 的字节长度逐一重算，不能宣称已证明整张表内容正确。
 
-## 第三步：验证真实 dataloader 一个批次
+### 4.4 再检查真实 loader 的 CPU 批次
 
 ```bash
 {
 python .agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py --check-data --output experiments/inference_infra/reports/d09_token_data_roundtrip.json
-rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/dataloader.py
+printf 'loader check exit=%s\n' "$?"
 } > >(tee -a experiments/inference_infra/reports/d09_session.log) 2>&1
 ```
 
-该脚本用每个 split 的真实 loader 取一批 `[1,32]`；训练时 loader 默认 buffer_size 为 1000，教学检查用 4 降低等待。它读取 parquet 第一 row group，检查 `text` 列非空且元素为字符串，然后检查：
+这次复用全部往返断言，还用真实 loader 为 train 与 val 各取一个 `[1,32]` CPU 批次。训练入口默认 `buffer_size=1000`；教学检查显式用 4，减少装填等待。它没有调用模型前向、反向或优化器。
 
-1. `x/y` 形状 `[B,T]=[1,32]`、整数类型；
-2. `x[:,1:] == y[:,:-1]`：x 取原始行的前 T 项，y 取后移一个位置后的 T 项，同一列的目标是输入的下一 token；
-3. 每行输入以 BOS 起头，ID 都在词表范围；
-4. train 与 val 都能产出，不会卡在空 train split。
+正常结果应新增 `train_batch`、`val_batch`，各有 `shape=[1,32]`、`first_ids`、`passed=true`。`first_ids` 只保存输入前八个 ID；第一个应与 JSON 的 BOS 特殊 ID 相同。`passed=true` 还代表脚本内部确认 x/y 为整数、`x[:,1:]==y[:,:-1]`、两者全部 ID 在词表范围。完整 y 没写进 JSON，因此解释错位时引用断言代码和第 2 节推导，不要声称 JSON 已逐项展示 y。
 
-<abbr title="Best-Fit Cropping · 从文档缓冲区中优先选择能完整塞入剩余空间的最长文档，塞不下时裁切。本文每行构造 T+1 个 token，再错位生成 x/y；没有 padding 不代表没有被裁切内容。">best-fit</abbr> 不等于简单按文件拼接；看清 T+1 到 `[B,T]` 的变化，再用聊天文字给出一个 6-token 的错位例子。
+只通过文字往返、但没有两个 split 的 batch 证据，不能声称真实 loader 已通过。两个批次都通过也只证明这次取样的格式与对齐，不覆盖全语料空行、重复、泄漏或语言质量；后续风险应按各自证据判断。
 
-## 第四步：自行核对后交流
+## 5. 失败时怎样定位，而不是盲目重跑
 
-直接用文末问题讨论两个 JSON、中文样本、BOS 和 x/y 错位。附实际输出与退出码，不只给出“passed”；`experiments/inference_infra/reports/d09_token_roundtrip.md` 仅为可选整理位置。
+| 现象 | 先解释原因，再决定动作 |
+|---|---|
+| 缺 rustbpe/tiktoken/pyarrow/torch | 对照解释器与缺包名称；记下未执行范围，修复既有 Conda 环境后再试，不换假 tokenizer 冒充真实检查 |
+| prepare 提示路径已存在 | 这是保护旧数据；换全新路径并同步 export，或确认旧目录确实是要复用的可信数据 |
+| 找不到 tokenizer 或 token_bytes | 核对已展开的数据根与两个文件；token_bytes 必须属于同一份词表，不复制另一词表的同名文件拼凑 |
+| status=error 但有 JSON | 看 `error` 的异常类型和退出码；JSON 存在本身不代表成功 |
+| loader 没有输出 | 先确认至少两份 parquet、train 非空、row group/text 有效；不要无限等待空迭代器。检查脚本可提前拦下部分格式问题，不保证所有坏数据都不会卡住 |
 
-## 失败分流与验收
-
-- `No module named rustbpe/tiktoken/pyarrow/torch`：先核对解释器；若 Conda 环境确实缺依赖，记录 `BLOCKED_DEPENDENCY`，不要把合成流程改成自制假 tokenizer 后冒充通过。
-- `pickle` 或词表异常：只使用自己生成或信任来源的 tokenizer；回到隔离目录重新准备，保留原数据。
-- `get_token_bytes` 报缺失：今天准备脚本会生成它；已有数据则回溯同一 tokenizer 的生成记录。
-- dataloader 长时间没有输出：先查 train split 文件数、row group、text 是否全空；不要无限等待没有数据的 iterator。
-- 验收：实际输出 `status=ok`、每个断言可解释；依赖受阻时交流中说明缺包名称及未执行范围，明天不可宣称已有合法 checkpoint。
+缺依赖或输入时，可以先完成概念与源码部分，把未执行的 **CPU 检查**注明原因。GPU 不在本日必做或待补列表中；无需为完成今天租 GPU 或训练语言模型。下一天的实际训练操作只在你选择执行并具备条件时开展。
 
 ## 今日脚本与产物清单
 
@@ -119,16 +258,16 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 
 | 脚本完整项目路径 | 用途 | 执行阶段 | 输入 | 运行条件 |
 |---|---|---|---|---|
-| `.agents/docs/career_roadmap/w2/scripts/d09_prepare_toy.py` | 构造隔离合成数据与 tokenizer | 第一步（可选） | 脚本内合成模板；--base-dir 指定全新绝对路径 | 仅无可用数据分支；torch/pyarrow/rustbpe/tiktoken 齐全 |
+| `.agents/docs/career_roadmap/w2/scripts/d09_prepare_toy.py` | CPU 学习小型 BPE 词表并构造隔离合成数据 | 4.2 无现成数据分支 | 脚本内合成模板；--base-dir 指定全新绝对路径 | 仅无可用数据分支；全新目录；CPU 依赖齐全，不需要 GPT 权重 |
 | `.agents/docs/career_roadmap/w2/scripts/d08_data_check.py` | 复用前一天的库存检查 | 准备后 | `/tmp/nanochat-w2-toy/tokenizer/`、`/tmp/nanochat-w2-toy/base_data_climbmix/` | 目录创建后 |
-| `.agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py` | 验证文本往返与 loader 批次 | 第二、三步 | `$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl`、`$NANOCHAT_BASE_DIR/tokenizer/token_bytes.pt`、`$NANOCHAT_BASE_DIR/base_data_climbmix/*.parquet` | 可信 tokenizer；--check-data 另要求非空 train/val |
+| `.agents/docs/career_roadmap/w2/scripts/d09_roundtrip.py` | 验证文本往返与 loader 批次 | 4.3、4.4 | `$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl`、`$NANOCHAT_BASE_DIR/tokenizer/token_bytes.pt`、`$NANOCHAT_BASE_DIR/base_data_climbmix/*.parquet` | 可信 tokenizer；--check-data 另要求非空 train/val |
 
 | 产物完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
 |---|---|---|---|
 | `experiments/inference_infra/reports/d09_toy_inventory.json` | 合成目录盘点 | d08_data_check.py | 条件自动；仅合成分支 |
 | `experiments/inference_infra/reports/d09_token_roundtrip.json` | 六组 tokenizer 断言 | d09_roundtrip.py | 自动；成功或捕获的异常均写 JSON |
 | `experiments/inference_infra/reports/d09_token_data_roundtrip.json` | train/val 批次断言 | d09_roundtrip.py --check-data | 条件自动；需执行数据检查 |
-| `experiments/inference_infra/reports/d09_token_roundtrip.md` | 往返与错位示意说明 | 第四步 | 可选人工整理；可直接在聊天中回答本日问题 |
+| `experiments/inference_infra/reports/d09_token_roundtrip.md` | 往返与错位示意说明 | 聊天交流后 | 可选人工整理；可直接在聊天中回答本日问题 |
 | `experiments/inference_infra/reports/d09_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
 
 合成分支的外部数据根示例为 `/tmp/nanochat-w2-toy`（仓库外，须是全新目录）；脚本条件自动生成下列文件，已有数据分支不生成它们：
@@ -141,30 +280,34 @@ rg -n 'row_capacity|best_idx|cpu_inputs.copy_|cpu_targets.copy_' nanochat/datalo
 | `/tmp/nanochat-w2-toy/tokenizer/token_bytes.pt` | 原生 token 字节长度 | d09_prepare_toy.py；条件自动 |
 | `/tmp/nanochat-w2-toy/d09_synthetic_provenance.json` | 合成数据来源说明 | d09_prepare_toy.py；条件自动 |
 
-原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
+原生 `tokenizer.pkl`、`token_bytes.pt` 保留加载器约定的文件名；用带日编号的外围文件归属日期。本日不生成模型或优化器 checkpoint。已有历史结果不原位重命名，新的命令使用本页命名。未执行的 CPU 检查说明缺少的依赖或输入；不预先声称产物已生成。GPU、语言模型训练与可选 Markdown 均不作为本日验收前置。
 
 ## 今日自验证与交流问题
 
-按题号在聊天中回答即可。概念题说明理由或推导；实测题引用当天日志或 JSON 中能支撑结论的关键片段，同一份证据可复用。开头一次注明已有数据或合成分支、数据根与证据路径，不必逐题重复环境。未执行标 `PENDING`；历史结果注明日期与版本。建议用约 20–25 分钟讨论，不要求另写报告或重复准备数据。
+直接在聊天中按题号回答，人工 Markdown 报告可选。概念题用推导说明；实际操作题引用本次 JSON 与日志即可。开头只需一次注明数据分支、实际数据根与证据路径，缺少的 CPU 操作说明原因，不把未运行写成通过。建议约 15–20 分钟。
 
-1. 从实际往返结果中选一条中文或 emoji 样本，说明为何 token 数、字符数与 UTF-8 字节数可能不同。假如某个单独 token 不能解码成完整字符，是否足以判断整句往返失败？
+1. `A中` 有 2 个字符、4 个 UTF-8 字节。若你实际 tokenizer 将它切成 3 个 token，是否出错？某个 token 单独解码显示替换字符时，应怎样判断整段往返是否成功？
 
-   **核对要点**：引用所选样本的 `text/token_ids/passed`，以整段 encode→decode 的相等性判断；分清字节片段与完整字符。顺带说明为何测试还需要空白、换行和空字符串样本，不能只验证英文句子。
+   **核对要点**：区分三种计数，依据整段编码后再解码的逐字符相等性；结合实际中文或 emoji case 的 `text/token_ids/passed`，不把示例 ID 当实测。
 
-2. 空字符串分别执行普通 encode 和显式 prepend BOS，应怎样理解这两种序列？为什么检查带 BOS 的往返时不能直接把解码全文与原文比较？
+2. 普通空字符串与显式 prepend BOS 的结果有什么不同？若往返检查失败后有人建议先 `.strip()` 再比较，你是否接受？
 
-   **核对要点**：根据 `d09_roundtrip.py` 的断言与 tokenizer 接口推导序列结构；解释 BOS 的作用及其 ID 应从何处取得，不硬编码某个整数，也不把特殊标记算作原文。
+   **核对要点**：从 encode 先编码、再插入标记的顺序推导；区分额外边界与原文，对空白/换行作出保真判断。
 
-3. 一行原始 token 为 `[BOS,11,12,13,14,15]`，T=5。请写出 x、y，指出输入 13 对应的监督目标，并解释为什么要先准备 T+1 个位置。
+3. 新的原始行是 `[BOS,31,32,33,34]`，T=4。写出 x、y，指出输入 32 的目标；若 B=3，这个批次包含多少个预测位置？
 
-   **核对要点**：给出两个长度正确的序列，说明同列输入与下一 token 目标的关系，并验证相邻切片的一致性；将推导对应到 `dataloader.py` 的两次切片，不能把 y 误写成当前输入。
+   **核对要点**：切片与长度正确，说明 T+1 的用途；批次单位是目标 token 位置，不能改说成句子数。
 
-4. best-fit 在一行还剩 5 个位置、候选文档长度为 3、5、8 时会如何选择？如果只剩 2 个位置且最短文档长度为 3，剩余内容会怎样处理？这为何说明“没有 padding”不等于“没有丢数据”？
+4. 上一题中，输入 32 的位置为何不能看见后面的 33？若把该列 y 改成 -1，又改变了什么？今天的真实 loader 会自动产生这样的 -1 吗？
 
-   **核对要点**：依据 `best_idx/shortest_idx` 两个分支推演选择与裁切；长度以编码后含 BOS 的文档为准。解释被取出的文档剩余部分是否放回缓冲区，不要求新增实验。
+   **核对要点**：区别注意力信息可见范围与损失位置选择；对应 `causal=True`、`ignore_index=-1` 和 loader 只填合法 ID 的事实，不要求运行模型。
 
-5. 这次 tokenizer 与 train/val 批次检查是否足以进入两步训练？从两个 JSON 各选一项实际断言说明它排除了什么错误，再指出检查尚未覆盖的一项数据风险。
+5. 一行剩余 4 个位置，候选文档（含 BOS）长度为 2、4、7，会选哪篇？接着另一行只剩 1 个位置，最短文档长 2，会留下怎样的数据？
 
-   **核对要点**：核对真实 `status` 与退出码；批次证据须覆盖两个 split 以及错位/ID 合法性。未覆盖风险可从普通 token 字节长度未逐项重算、首 row group/单批不能代表全语料、合成数据不能代表语言质量中选择一项解释。缺数据或依赖时说明阻塞，保持相应项目待验。
+   **核对要点**：推导 longest-fit 与 shortest-crop 两个分支；说明文档被 pop 后剩余尾部不回填，位置全满不能推出语料完整保留，BOS 也不是文档隔离掩码。
 
-离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。
+6. 根据你这次的输出，能否声称“文本往返与 train/val 批次对齐已检查”？如果是，只举两项关键证据并指出一项仍无法推断的结论；未运行则说明对应缺项。
+
+   **核对要点**：同时看 `status`、退出码、两个 split 的 batch 结果，并能回到实际断言；不能由合成数据和单批检查推断语言质量、全语料质量或模型训练已完成。
+
+离开前保留自动结果与本日局部日志；重跑注明会话边界。可选报告位置是 `experiments/inference_infra/reports/d09_token_roundtrip.md`，不写报告不影响交流。下一天复用已确认的结论与路径，无需为了重复证明同一件事再生成数据。分享证据时检查私人路径；不提交 tokenizer、语料、权重或环境目录。
