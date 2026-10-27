@@ -1,165 +1,249 @@
 ---
 source_files:
-  - nanochat/common.py
-  - nanochat/tokenizer.py
-  - nanochat/dataset.py
-  - nanochat/dataloader.py
-  - scripts/tok_train.py
-  - scripts/tok_eval.py
-  - scripts/base_train.py
-  - nanochat/checkpoint_manager.py
-  - nanochat/gpt.py
+  - .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py
+  - .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py
   - nanochat/engine.py
-  - scripts/infer_bench.py
   - nanochat/flash_attention.py
+  - scripts/infer_bench.py
+source_symbols:
+  - measure
+  - main
+  - metrics
+  - Engine.generate
 doc_type: tutorial
-knowledge_scope: W2第6天实操与验收
+knowledge_scope: W2第6天重复测量、指标复算与结果追溯
 ---
 
-# W2 D6：运行三次预热、五次正式测量
+# W2 D6：把一次生成变成可复核的重复测量
 
 前一天：[返回前一天](d12_benchmark_schema.md)；后一天：[继续下一天](d14_matrix_smoke.md)；[原始总计划](../nanochat_daily_execution_2026-10-01.md)。
 
+今天回答一个问题：**同一模型生成多次，怎样得到一个能解释、能追溯的结果？** 你会用 CPU 上的微型随机模型完成“生成记录 → 检查单次指标 → 汇总五次正式样本”。无需训练、tokenizer 文件或 checkpoint；可选模型与 GPU 不影响当天完成。
+
 ## 当天的流程阅读
 
-先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+先用约 10–20 分钟读下面指定的小节，已读内容按问题回查即可，不新增手写报告。
 
 - **阅读入口**：[12.2 生成控制流与返回格式](../../llm-training-workflow/12-inference-and-generation.md#reading-12-2)；[10.1 日志口径](../../llm-training-workflow/10-logging-checkpoints-and-resume.md#reading-10-1)。
-- **今天重点**：回读实际输出长度、终止条件与日志统计范围，逐项对应今天的预热、正式记录和自动汇总。今天主要做应用回查，不增加新训练概念。
-- **暂时跳过**：不用重读已掌握的整章；不把观察单次数字当作重复测量完成。
+- **今天重点**：生成可能提前终止；要求的长度和实际有效输出长度并不总相等。日志应留下发生过的过程，统计再决定能纳入哪些样本。
+- **暂时跳过**：训练和恢复流程；本日不启动训练。
+- **读完能解释**：要求输出四个 token，却只得到两个时，用“四个”计算吞吐为什么会夸大结果？
 
-**读完能解释**：如果一次生成提前结束，直接用要求的生成长度作吞吐分子，会产生什么问题？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+## 1. 先分清“两层循环”
 
-## 开始前：固定 shell 与结果位置
+### 1.1 三次预热、五次正式究竟重复什么
 
-所有命令从仓库根目录执行。当前终端会自动激活 nanochat 环境，无需重复激活；先运行以下检查。这里使用本项目的 Conda 环境；不要混用系统 Python。CPU实验建议先 `export NANOCHAT_DTYPE=float32`；脚本只在变量未设置时选择FP32，已有变量会遵从并记录，不能假定CPU必定FP32。GPU实验另按协议显式选dtype。
+设提示长度 P=8、生成列数 G=4、批量 B=1。<abbr title="Token · 模型处理的离散单位，以整数 ID 表示；一个 token 不一定对应一个字或一个单词。">token</abbr> 数按模型输入输出单位计算。一次 <abbr title="Run · 一次完整生成测量。本文一次 run 从固定提示开始，创建新生成器及缓存，最多取 G 次输出；不是一个 token 的生成步骤。">run</abbr> 从同一个提示开始，生成 a、b、c、d。三个后续间隔对应 b、c、d；a 的等待时间是首 token 延迟。
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+`--warmup 3 --repeats 5` 表示把**整次生成**执行八次：
+
+| 顺序 | phase | 每次工作 | 记录位置 | 是否进入正式指标统计 |
+|---|---|---|---|---|
+| 第 1–3 次 | warmup | 提示 8 个 token，最多生成 4 列 | raw 中各一行 | 否 |
+| 第 4–8 次 | measure | 相同提示和配置，最多生成 4 列 | raw 中各一行 | 有效时进入 |
+
+因此正常情况下 raw 有八行，正式样本数是五；每行又包含一次首 token 耗时和三个后续间隔。不是“预热三个 token，再测五个 token”，也不是将 15 个后续间隔当成 15 次独立生成。
+
+<abbr title="Warmup · 预热。先执行与正式测量相同的工作，使首次库调用、内存分配等初始化影响尽量在正式样本之前发生；固定三次并不保证所有设备都已稳定。">预热</abbr>减少首次调用影响，但不保证设备已经稳定。每次 run 都新建 Engine 和 <abbr title="KV Cache / Key-Value Cache · 键值缓存。保存已经处理位置的注意力键和值，使后续生成复用历史计算；本文每次完整 run 重新创建。">KV Cache</abbr>，预热不会让正式 run 直接沿用上一轮提示缓存。模型加载只发生一次，位于这八次测量之前。
+
+**先手推**：若改成 G=1，仍然有八次 run；每行只有首 token，没有后续间隔，TPOT 应为 `null`，不是 0。保持这个区分再读代码。
+
+### 1.2 一条记录怎样产生三个指标
+
+下面是教学假设，不是你的 CPU 实测：一次 B=1、G=4 的有效生成，首 token 花 30 ms，后续间隔为 `[10, 12, 8]` ms。
+
+| 指标 | 在该 run 中怎样算 | 例子 |
+|---|---|---|
+| <abbr title="TTFT / Time To First Token · 首 token 延迟。本文从计时开始到第一次输出返回；模型加载与提示分词不在其中。">TTFT</abbr> | 第一次输出前的等待 | 30 ms |
+| <abbr title="TPOT / Time Per Output Token · 后续输出间隔。本文先对一个 run 内首 token 之后的 G−1 个输出间隔求平均，再跨 run 汇总。">TPOT</abbr> | 后续间隔的平均值 | (10+12+8)/3 = 10 ms |
+| elapsed | 首 token 加后续间隔 | 30+10+12+8 = 60 ms |
+| tokens/s | 有效 token 总数 ÷ 包含首 token 的总时长 | 4/0.060 ≈ 66.67 token/s |
+
+今天脚本的吞吐**包含首 token 延迟**。若只算后续生成速度，得到 `3/0.030=100 token/s`，那是另一种统计范围，不能直接替换本行结果。W1 阅读过的原生 `scripts/infer_bench.py` 吞吐排除了首 token；比较前应先统一范围。
+
+若 B=4、每行都完整输出四个 token，分子是 16；仍按整个批次经过的时间计算。一次输出返回一列 B 个 token，TPOT 是列间隔，不是将间隔再除以 B。Engine 对**同一个提示先做一次 prefill，再复制缓存到 B 行**；这不等于四个不同用户的请求分别处理提示。
+
+### 1.3 五条正式样本怎样汇成一个结果
+
+继续用假设的五次有效 TTFT：`[30, 32, 29, 80, 31]` ms，排序为 `[29, 30, 31, 32, 80]`。
+
+- 中位数取中间的 31 ms。它避免只挑最快的 29 ms。
+- <abbr title="P95 / 95th percentile · 第95百分位。脚本使用 nearest-rank：排序后取 ceil(0.95N) 位。五个样本时取第五位，即最大值，不能代表稳定的尾延迟估计。">P95</abbr> 用 nearest-rank：`ceil(0.95×5)=5`，所以是 80 ms。
+- 同时保留 N=5 和范围 29–80 ms。P95 等于最大值，说明五次样本提供的尾部信息很少。
+
+这里是“先为每个 run 算指标，再对五个 run 求中位数或 P95”。TPOT 也先每 run 求后续间隔均值；不要把所有 run 的原始间隔摊平后当作同一种统计。吞吐列的中位数是五个 run 吞吐的中位数，也不是把所有 token 和时间相加所得的整体吞吐。
+
+## 2. 带读：源码如何兑现这些定义
+
+打开 [重复测量脚本](scripts/d12_benchmark.py)，这次按下面执行顺序阅读，不需要逐行背字段。
+
+### 2.1 main：准备一次，完整生成重复八次
+
+`load(args)` 在循环外构造模型或加载权重，设置 `eval()`。随后计算模型/输入身份和环境信息；这些工作都不在生成计时内。进入 `torch.inference_mode()` 后，核心循环是：
+
+```python
+for phase, n in [("warmup", args.warmup), ("measure", args.repeats)]:
+    for repeat in range(n):
+        row = measure(args, torch, model, tokenizer)
+        # 为本次 run 添加 run_id、phase、repeat，并追加一行 JSONL
+```
+
+这是省略异常分支的源码节选。一个脚本进程对应一个 `session_id`；每个 run 有自己的 `run_id`。重新启动命令会产生新 session，即使输出追加进同一文件，也不应合并成同一次实验。
+
+异常处理也属于执行过程：`early_stop` 会保存后继续其他 run，最后退出 2；某个 run 抛异常会写 `error` 行并提前退出 1；模型加载等准备异常会写 `setup_or_run` 错误行。因而文件不足八行可能有原因，八行也不保证五次正式成功。
+
+### 2.2 measure：首个 next 才真正进入生成器
+
+`measure()` 创建新 Engine、构造固定 token ID 提示，再调用 `engine.generate(...)` 得到生成器。这时生成器正文尚未执行。计时开始之后：
+
+```python
+for _ in range(args.decode_tokens):
+    column, masks = next(stream)
+    sync()
+    now = time.perf_counter()
+    times.append((now - previous) * 1000)
+    previous = now
+```
+
+这也是省略计数和异常处理的节选。第一次 `next()` 执行 [Engine.generate](../../../../nanochat/engine.py) 中的提示前向计算、缓存分配/复制和第一次采样，所以 `times[0]` 是 TTFT。后面的 `next()` 从上次 yield 恢复，处理前一列 token 并得到下一列；`times[1:]` 才是后续间隔。
+
+脚本恰好取 G 次输出，然后关闭生成器。当前 Engine 在最后一次 yield 后仍有准备下一步的前向计算；若继续取到 `StopIteration`，会额外执行一次不需要的前向。W1 原生入口在这次调用结束时捕获异常，没有把这次耗时追加进自己的计时数组；额外执行和计入指标要分开判断。这里的 G=4 是“四列输出”，不是“首 token 后再执行四次”。
+
+CUDA 路径每次输出后同步，避免只测到任务提交时间；CPU 的 `sync()` 为空操作。脚本不执行 `torch.compile`；记录的是当前 eager Engine。计时覆盖生成器工作及其间 Python 控制开销，排除加载权重、提示分词和文件写入。
+
+最后检查实际输出：仅非终止且 `mask=1` 的 token 计入有效数。出现终止、强制输出或不足 G 列，状态为 `early_stop`，不作为完整固定长度样本。
+
+## 3. 动手：CPU 随机模型跑一次完整流程
+
+### 3.1 准备环境与独立结果位置
+
+所有命令从项目根目录执行。终端已自动激活 nanochat，不重复激活。局部 `{ ...; } > >(tee ...)` 只记录该命令组，避免持续截获终端提示符。日志追加写入；每条关键命令后立即打印退出码。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
 {
 python -c "import sys; print(sys.executable); print(sys.version)"
-} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
-```
-
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。若环境不存在或第三方依赖缺失，先解决环境，不把 `--help` 成功当作模型实验通过。后面写入的 `experiments/` 文件是你实际执行教程时产生的正式成果；本指导不预先生成成绩。大数据、tokenizer、权重放在 `NANOCHAT_BASE_DIR`，不要加进 Git。表中的 `$NANOCHAT_BASE_DIR` 代表当前 shell 选定的真实绝对数据根；合成分支示例为 `/tmp/nanochat-w2-toy`，未设置时当前用户默认根为 `/home/lizishuo/.cache/nanochat`。交流时给出实际展开后的绝对路径；`*.parquet` 表示该目录内逐一列出的实际数据文件，旧数据回退目录为 `$NANOCHAT_BASE_DIR/base_data/`。
-
-本页各 Bash 代码块内的输出追加保存在 `experiments/inference_infra/reports/d13_session.log`；命令返回后立即执行 `echo "exit=$?"`，避免丢失退出码。帮助、源码检索、解释器与 Git 检查只打印，不另有检查结果文件。日志是追加写入，重跑时交流中注明会话边界或日志中的起止位置。
-
-## 今日目标与时间盒
-
-用 15 分钟审查脚本、20 分钟 CPU 契约试跑、20 分钟真实checkpoint试跑（具备资源才做）、20 分钟自动汇总。前置是 [原始数据协议](d12_benchmark_schema.md)。今天的核心是重复与自动统计，不是比较某次最快耗时。
-
-## 第一步：检查入口与保存路径
-
-```bash
-{
+export NANOCHAT_DTYPE=float32
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --help
+echo "help_exit=$?"
 } > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
-打开 [完整重复测量实现](scripts/d12_benchmark.py)，依次找 `load()`、`measure()`、`main()`。确认模型加载/hash计算在计时外；每次run创建新Engine/cache；预热与正式均保存；测量每步用 `perf_counter` 并在CUDA同步；CPU不会调用CUDA显存函数。
+解释器应为 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。精度在模块导入时确定；显式设置 FP32 避免沿用终端的其他值。帮助命令成功只说明入口可用，下面生成记录才是实际实验。
 
-本脚本不用 `scripts.infer_bench` 的单次JSON反复拼接，因此能保留逐步间隔与有效token。官方脚本仍可用于阅读，但不能直接作为本计划重复基线。当前模式是uncompiled eager Engine；以后启用编译必须新建协议版本。
+### 3.2 先预测记录形状，再执行
 
-## 第二步：先做无需训练模型的契约验证
+先预测：一个新 session 正常应有八行；每行 `actual_decode_steps=4`、`per_row_generated_tokens=[4]`、`generated_tokens=4`、`decode_step_ms` 长度为 3。
 
 ```bash
 {
 python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --random-model --prompt-tokens 8 --decode-tokens 4 --batch-size 1 --warmup 3 --repeats 5 --seed 42 --output experiments/inference_infra/results/raw/d13_p8_g4_b1_random_cpu.jsonl
+echo "benchmark_exit=$?"
 } > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
-<abbr title="Random model · 随机初始化且没有经过训练的模型。本文只用于检查张量、生成器、计时与落盘契约；随机模型的工作负载与真实checkpoint不能混入同一性能组。">random-model</abbr> 使用2层、C=64、H=2、V=512模型和合成token映射，没有加载真实tokenizer，因此它不能代替两步训练门槛。输出应8行：3行warmup、5行measure。模型初始化有随机性，输出只用于契约检查，不是生成质量。
+`--random-model` 构造两层、嵌入维度 64、两头、词表 512 的小模型，使用脚本内的合成 token 映射。它不会下载模型、训练模型或读取真实 tokenizer；数字用于学习执行和统计契约，生成文本没有质量意义。
 
-打开JSONL逐行看phase/status，确认 `actual_decode_steps=4`、`per_row_generated_tokens=[4]`、`generated_tokens=4`、`len(decode_step_ms)=3`。检查 `elapsed_ms` 近似等于 `ttft_ms + sum(decode_step_ms)`，`tokens_per_s = 4000 / elapsed_ms`。允许微小浮点舍入差，不允许把ms直接当s。
+打开命令生成的 raw：`experiments/inference_infra/results/raw/d13_p8_g4_b1_random_cpu.jsonl`（相对于项目根，执行后才存在），找到本次 session 的 `measure+ok` 行。先从 `ttft_ms` 与 `decode_step_ms` 加出 elapsed，再用有效数复算 tokens/s、用后续间隔复算 TPOT，对照该行结果。不要要求耗时等于前面的 30 ms 教学假设。
 
-## 第三步：使用已冻结checkpoint重复测量
+脚本仅追加数据。再次运行前换一个仍匹配 `dNN_p*_g*_b*.jsonl` 的文件名，例如加 `_retry1`；若已经追加，依据 session 区分。不要删除失败行后把余下记录描述成一次全成功测量。
 
-准备好昨天记录的数据根与模型后运行：
+### 3.3 从 raw 到审计，再到 CSV
 
-```bash
-{
-python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --source base --model-tag d11_w2_20 --step 20 --prompt-tokens 32 --decode-tokens 8 --batch-size 1 --warmup 3 --repeats 5 --seed 42 --output experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cpu.jsonl
-} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
-```
+现在打开 [汇总脚本](../w3/scripts/d13_aggregate.py)。先看 `metrics(row)`：只对 `measure+ok` 计算指标，还要核验列数、各行有效数、正数耗时，以及 `elapsed≈TTFT+sum(steps)`。它从原始计时和计数**重新计算** TPOT 与吞吐，不盲信已有汇总字段。
 
-CPU记录标 `CPU_FUNCTION_ONLY`，有timing不等于可以评价GPU性能。合成数据训练出的checkpoint还要在模型来源中注明synthetic；它只是一套合法的系统实验权重。
-
-若已有GPU、对应PyTorch且完成环境核对，把 `--device cpu` 改成 `--device cuda`，将输出明确改为 `experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cuda.jsonl`，并在运行前设置明确的 `NANOCHAT_DTYPE`。精度在模块import时确定，不能同一Python进程跑一半再改变量。GPU驱动用 `nvidia-smi` 单独留在会话日志或聊天协议确认中；脚本环境字段包含PyTorch/CUDA、设备名、线程数、源码commit、dirty与后端。
-
-## 第四步：自动汇总，保留失败行
-
-使用下一周共用的 [统计脚本](../w3/scripts/d13_aggregate.py)，先检查实际CLI：
-
-```bash
-{
-python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --help
-} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
-```
-
-实际汇总命令如下。它读取共享目录 `experiments/inference_infra/results/raw/` 下全部匹配的原始文件，按 session 和实验身份分别汇总；不会只凭 d13 文件名前缀筛选。本日验收须依据审计记录中的完整输入文件路径和 run_id，选出本次生成的两组，不能把其它日期的组数算作今天完成数：
+再看 `main()`。原始文件采用 <abbr title="JSONL / JSON Lines · 每行一个独立 JSON 对象。本文一行保存一次 run，可逐行保留成功或失败过程。">JSONL</abbr>；汇总采用 <abbr title="CSV / Comma-Separated Values · 逗号分隔表格。本文每行代表一个实验身份组，列中保存样本账和跨 run 统计值。">CSV</abbr>。脚本先为记录建立身份组，再验证每条正式记录，将结果写入 <abbr title="Audit · 审计记录。本文每条非预热记录对应一条来源记录，含原文件绝对路径、行号、run_id、是否纳入和原因。它支持把 CSV 数字追溯到原始生成。">audit</abbr>，最后按组统计有效样本。预热单独检查，不写入 audit，也不计入 CSV 的 `n_total`。正常八行 raw 对应五行 audit，CSV 中 `n_total=n_valid=5`、`n_excluded=0`、`warmup_status=OK`。
 
 ```bash
 {
 python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py --raw-dir experiments/inference_infra/results/raw --output experiments/inference_infra/results/summary/d13_w2_baseline.csv --audit experiments/inference_infra/results/summary/d13_w2_audit.jsonl
+echo "aggregate_exit=$?"
 } > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
 ```
 
-然后按 [W3统计复核教程](../w3/d19_statistics_audit.md) 的命令生成CSV。要求把 `model_kind/device/precision/attention_backend/P/G/B/tag/step` 不同的行分开；不同session和checkpoint hash也不能无判断合并。median是正式run的中位数；<abbr title="P95 / 95th percentile · 95%样本不超过的分位值。本文汇总采用nearest-rank：排序后取ceil(0.95N)对应样本，N=5时等于最大值；不能据此断言尾延迟稳定。">P95</abbr> 在仅五个样本时信息很有限，因此交流时同时给出样本数、最小/最大值。
+该命令读取 raw 目录内**所有匹配文件**，不只读 D13 文件。输出文件名带 d13 不代表输入只来自今天；不要将其他天的组数算作今天完成数。CSV 与 audit 每次覆盖生成，raw 保留原记录。
 
-## 常见失败、产物与验收
+为什么相同 P/G/B 不一定同组？例如昨天与今天各跑一次，`session_id` 不同，就分开统计。若输入 fill ID 改变，`prompt_sha256` 随之改变，也分组。设备、精度、注意力后端、模型配置、权重/元数据/tokenizer 哈希及 `env`（源码版本、dirty、线程数等）同样参与身份判断。这样不会把不同工作负载混成一次五样本结果。
 
-- `early_stop`：至少一行遇到terminal、forced输出或有效长度不足；保留raw行，并记录重新选择工作负载的理由。不要把实际少于G的值当固定G性能。同一prompt与greedy配置重跑通常仍会早停；可用 `--prompt-fill-id 2` 改变普通ID工作负载（须在词表范围且非特殊ID），换新raw文件并按 `prompt_sha256` 单独分组，不从若干prompt挑出最好数字。
-- `P+G exceeds`：缩短P/G或准备更长sequence_len的模型；脚本拒绝静默截断。
-- 每次都追加到旧raw：脚本是append-only，新实验使用新文件名；若重复执行，汇总前按session_id区分。
-- `status=error`：查看error字段和退出码；GPU OOM行不得删除后只展示剩余成功数据。
-- 验收：至少一个真实跑出的8行文件（含预热），全部字段可解释；汇总来自脚本。CUDA不可用写 `PENDING_GPU`，训练模型不可用写 `PENDING_CHECKPOINT`。
+按这个方向核对一条证据链：
 
-## 今日脚本与产物清单
+1. 在 CSV 依据本次 `session_id` 找到该组，从 `run_ids` 取一个 ID。
+2. 在 audit 找该 ID，确认 `included=true`，取 `file` 和 `line`。
+3. 回到 raw 对应行，确认 phase/status，再复算指标。预热状态另回 raw 查前三行。
 
-每日编号使用全程 d01–d21；跨日复用保留首次实际执行日。以下项目相对路径均以仓库根目录为基准，脚本清单直接列出本日执行入口。
+这条链比“看到 CSV 有数字”多回答了两个问题：数字来自哪里、为什么这条记录能纳入。CPU 主线预期 `conclusion_status=CPU_OR_RANDOM_CONTRACT`，表示流程与统计的验证范围；它可以完成今天学习，不产生未来必须补做 GPU 的欠账。
 
-| 脚本完整项目路径 | 用途 | 执行阶段 | 输入 | 运行条件 |
-|---|---|---|---|---|
-| `.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py` | 复用重复测量入口 | 第二、三步 | 随机模型无需文件；真实模型读 `$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/model_000020.pt`、`$NANOCHAT_BASE_DIR/base_checkpoints/d11_w2_20/meta_000020.json`、`$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl`；固定 token ID prompt | CPU 契约可先跑；checkpoint/GPU 分支分别满足条件 |
-| `.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py` | 按身份分组统计并审计原始记录 | 第四步 | experiments/inference_infra/results/raw 中本次 JSONL | raw 文件实际存在；错误行保留 |
+## 4. 结果不符合预期时，沿状态分流
 
-| 产物完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
+| 现象 | 先检查什么 | 怎样处理 |
+|---|---|---|
+| raw 八行但正式有效少于五 | 本 session 的 phase/status、audit 的 included/reason | 八行只是记录数。保留排除记录，说明实际样本数；不要挑五个最快值 |
+| `early_stop`、退出 2 | 实际列数、各行有效数、终止或强制输出 | 固定长度样本未满足。可换普通 `--prompt-fill-id 2` 并换新文件，作为新输入工作负载；同提示 greedy 重跑通常不会解决终止 |
+| `status=error`、退出 1 | raw 的 error 与会话日志 | 准备异常可能只有一行，run 异常会提前结束循环；修复依赖或参数后另开 session |
+| `P+G exceeds` | 模型的 sequence_len | 缩短输入/输出长度；脚本不会静默截断 |
+| 汇总因重复 run_id 停止 | 是否复制同一 raw 到多个匹配文件 | 保留唯一原始来源，别靠复制凑重复次数 |
+| CSV 的 TPOT 为空 | 是否 G=1 | 正常：没有后续间隔。CSV 空值对应 raw 的 null，不能填 0 |
+| 汇总没有找到输入 | 文件名及 raw-dir | 文件名须匹配 dNN_p*_g*_b*.jsonl；先确认测量实际生成文件 |
+
+CPU / random 行的显存字段为空是适用范围所致，不是缺少 GPU 作业。若选择修复并重跑，只针对发现的问题，不必为了重复验收再次运行有效实验。
+
+## 5. 可选：已有 D10 权重时复用同一协议
+
+本节只供**已经主动完成 D10 可选两步训练**的人使用。没有文件直接跳过；无需为 D13 开始训练。先设置 D10 实际使用的数据根，不能猜测有 checkpoint：
+
+```bash
+{
+export NANOCHAT_BASE_DIR=/tmp/nanochat-w2-toy
+python .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py --device cpu --source base --model-tag d10_w2_smoke --step 2 --prompt-tokens 32 --decode-tokens 8 --batch-size 1 --warmup 3 --repeats 5 --seed 42 --output experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cpu.jsonl
+echo "checkpoint_exit=$?"
+} > >(tee -a experiments/inference_infra/reports/d13_session.log) 2>&1
+```
+
+`/tmp/nanochat-w2-toy` 仅为 D10 合成分支示例，以你实际保留的根为准。要求其中已有 `base_checkpoints/d10_w2_smoke/model_000002.pt`、`meta_000002.json` 和 `tokenizer/tokenizer.pkl`。显式 tag/step 避免脚本默认标签指向旧计划。合成数据权重仍只支持系统流程学习，不能作为语言质量结论。
+
+已有合适 GPU、对应 PyTorch 和权重时，可自选改 `--device cuda`，输出用 `d13_p32_g8_b1_checkpoint_cuda.jsonl`，并在新进程导入前显式选择精度、记录实际驱动与设备。未选择此扩展不会影响当天验收。也不把随机 CPU 的数字与该组直接比较为加速结论。
+
+## 6. 今日自验证与交流
+
+按题号在聊天回答，无需手写 report。开头给一次本次 session、raw/CSV/audit 路径；实测题引用同一份证据即可。未执行的主线操作如实说未执行，可选分支未选不算缺项。
+
+1. 若把本页命令改为 G=1，完整成功应有几行 raw、几条 audit、每行几个后续间隔？为什么 TPOT 为空而 TTFT 有值？
+
+   **核对要点**：分别解释 run 数、正式样本数和一次 run 内的输出数，连到 next/yield 的执行顺序。
+
+2. 取本次一条 `measure+ok`，用原始计时与有效数复算 TPOT、tokens/s 和 elapsed。若有人把首 token 后的吞吐当作这里的吞吐，哪两个统计范围混淆了？
+
+   **核对要点**：给出 run_id、实际值、单位和公式；说明首 token 的计数与耗时必须同范围，不拿教学假设当实测。
+
+3. 从本次 CSV 沿 run_id→audit→raw 追溯一条记录。若同目录另一文件 P/G/B 一样、session 不同，它会怎样进入统计？预热去哪里查？
+
+   **核对要点**：指出实际路径与行号，解释至少一个分组差异及其理由；CSV 的 n_total 不包含预热。
+
+4. 对本次五个正式有效 TTFT 排序，复核 median、P95、样本数和范围。若其中一个很慢，能否删掉再称为“五次正式测量”？
+
+   **核对要点**：展示取位方法；解释五样本 P95 的局限和删除记录的证据问题。有无效样本则按实际数量讨论，不补造五条。
+
+5. 推演：三次预热均成功，五次正式中一条 early_stop。CSV 的 n_total、n_valid、n_excluded 应是什么？如果改 fill ID 后重跑成功，能否把两组成功行拼满五条？
+
+   **核对要点**：区分原始记录、有效样本与身份组；保留失败原因，用新输入 hash 解释为什么分开。无需主动制造异常。
+
+## 7. 脚本与产物查阅表
+
+下表路径以项目根为基准。只打印的环境/帮助检查由局部 tee 保存到当天日志；实际命令运行才生成实验文件。
+
+| 脚本完整项目路径 | 用途与阶段 | 完整输入路径/参数 | 运行条件 |
 |---|---|---|---|
-| `experiments/inference_infra/results/raw/d13_p8_g4_b1_random_cpu.jsonl` | 随机 CPU 重复契约记录 | d12_benchmark.py | 条件自动；成功 8 行，失败记录实际行数 |
-| `experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cpu.jsonl` | 真实 checkpoint CPU 记录 | d12_benchmark.py | 条件自动；模型分支实际运行才存在 |
-| `experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cuda.jsonl` | GPU checkpoint 重复记录 | d12_benchmark.py | 条件自动；仅 CUDA 分支实际运行后存在 |
-| `experiments/inference_infra/results/summary/d13_w2_baseline.csv` | 分组汇总 | d13_aggregate.py | 条件自动；实际执行统计 |
-| `experiments/inference_infra/results/summary/d13_w2_audit.jsonl` | 逐行审计 | d13_aggregate.py | 条件自动；实际执行统计 |
-| `experiments/inference_infra/reports/d13_session.log` | 当天终端输出与手动记录的退出码 | 各 Bash 代码块的 tee | 自动；仅追加各代码块内的输出 |
+| `.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py` | 第 3 节重复生成，第 5 节可选权重复用 | 主线仅 P/G/B 参数；可选读 `$NANOCHAT_BASE_DIR/base_checkpoints/d10_w2_smoke/model_000002.pt`、`$NANOCHAT_BASE_DIR/base_checkpoints/d10_w2_smoke/meta_000002.json`、`$NANOCHAT_BASE_DIR/tokenizer/tokenizer.pkl` | 主线 CPU 与项目依赖即可；可选文件须已存在 |
+| `.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py` | 第 3.3 节验证/汇总 | `experiments/inference_infra/results/raw/dNN_p*_g*_b*.jsonl`，兼容旧 `p*_g*_b*.jsonl` | 至少有实际非预热记录，run_id 唯一 |
 
-原生 `tokenizer.pkl`、`token_bytes.pt`、`model_<step>.pt`、`meta_<step>.json` 与 `optim_<step>_rank0.pt` 是 loader 的格式契约，保留其名称；用带日编号的数据文件或模型标签归属日期。已有历史结果不原位重命名，新的命令使用本页命名。没有执行或条件不满足的必需检查均标 PENDING；可选 Markdown 未整理不影响验收。
+| 产物完整项目相对路径 | 用途 | 生成步骤与条件 |
+|---|---|---|
+| `experiments/inference_infra/results/raw/d13_p8_g4_b1_random_cpu.jsonl` | 主线每 run 原始记录 | 第 3.2 节自动追加；正常八行，异常保留实际行数 |
+| `experiments/inference_infra/results/summary/d13_w2_baseline.csv` | 各组有效样本统计与结论范围 | 第 3.3 节 aggregate 自动覆盖生成 |
+| `experiments/inference_infra/results/summary/d13_w2_audit.jsonl` | 非预热记录的纳入判断与来源 | 同上；预热回 raw 查 |
+| `experiments/inference_infra/reports/d13_session.log` | 环境、命令输出和即时退出码 | 各 Bash 命令组的 tee 自动追加 |
+| `experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cpu.jsonl` | 可选两步权重 CPU 记录 | 仅第 5 节实际执行时追加生成 |
+| `experiments/inference_infra/results/raw/d13_p32_g8_b1_checkpoint_cuda.jsonl` | 可选 GPU 权重记录 | 仅自行选择 CUDA 扩展且实际执行后生成 |
 
-## 今日自验证与交流问题
-
-按题号在聊天中回答即可。概念题说明理由或推导；实测题引用当天 JSONL、audit 或 CSV 中能支撑结论的关键片段，同一份证据可复用。开头一次注明本次分支与 session、raw/汇总路径，不必逐题重复命令和环境。未执行标 `PENDING`；历史结果注明日期与版本。建议用约 20–25 分钟讨论，不要求重跑已有有效实验或另写统计报告。
-
-1. 这次文件有 8 行，是否就完成了“三次预热、五次正式成功”？请按本次 session 的 phase/status 判断实际完成情况，并解释预热在解决什么问题、为何仍须保存。
-
-   **核对要点**：用实际记录区分预热、正式、提前结束和错误，排除追加的旧 session；预热不进入正式统计，但参与判断运行条件是否满足。不能把输出列数、文件行数和独立重复次数混为一谈。
-
-2. 选一条本次 `measure+ok` 原始行，不采用记录中现成的 TPOT 和 tokens/s，直接从逐步间隔和有效 token 数复算它们。能否同时核对总时长的一致性？
-
-   **核对要点**：给出 run_id 或文件行号，展示所用原始值、公式和单位，核对 TTFT 加后续间隔与 elapsed 的关系；没有有效行就说明原因，不用教学算例冒充本次实测。
-
-3. 从 CSV 选本次的一组，沿 `run_ids→audit→raw` 追到一条有效记录。为什么共享目录里同样 P/G/B 的其他日期或其他模型记录没有合并进来？
-
-   **核对要点**：用一条实际追溯链说明身份分组，包括 session、模型/输入哈希及环境等直接相关差异；汇总文件名不限制输入日期，audit 不包含预热，预热须回 raw 核对。不要求抄录全部分组字段。
-
-4. 对同一组的五次正式有效 TTFT 排序，核对中位数与 nearest-rank P95。若只有五个样本，P95 的位置意味着你能对尾延迟作出多强的判断？
-
-   **核对要点**：引用同一组的实际样本和 CSV，展示排序与取位方法，同时报告样本数及范围；区分对每 run 指标取分位数与把全部 decode 间隔混合取分位数。样本不足时说明统计边界，不挑最快的一次代替。
-
-5. 若一条正式记录 `early_stop`、另一次命令因加载异常退出，该怎样保留和解释结果？如果改 fill ID 后才完成固定长度，为什么必须作为另一种工作负载？
-
-   **核对要点**：根据实际异常或明确标注的推演区分退出码与行状态，说明错误可能使循环提前结束；保留失败证据，依据 audit/CSV 的排除原因与 `conclusion_status` 判断放行范围。输入哈希变化不能混组或挑最佳成绩，CPU/random 仍只支持功能契约结论。
-
-离开前保留本日会话日志与自动结果；若追加重跑，注明会话边界。交流时可附 `git rev-parse HEAD`、`git status --short` 及实际设备/精度以定位证据，不必另填通用表。下一天可直接复用本聊天中已确认的结论与证据路径。共享前检查数据路径和日志是否包含私人信息；若提交成果，只纳入自己的轻量记录与脚本，不提交权重、数据、环境目录或缓存。
+当天完成标准是能解释上述循环和统计，并完成主线 raw→audit→CSV 的一次追溯；不要求训练、GPU 或额外 Markdown 报告。下一天复用已确认的证据，进一步研究 P/G/B 改变工作负载会发生什么。
