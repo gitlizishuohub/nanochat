@@ -6,7 +6,7 @@
 
 ## feedback
 
-- [career-roadmap-guides](career-roadmap-guides.md) — W1–W3 教程直链每周 scripts；每日验收按学习价值选题、数量适中、避免重复盘点；聊天回答、报告可选。
+- [career-roadmap-guides](career-roadmap-guides.md) — W1–W3 教程与验收约定；D7 教学支撑不足反馈，源码定位和验收齐全不等于能指导学习。
 - [docs-diagrams](docs-diagrams.md) — 文档图示先核对技能要求，同时检查连接线、箭头对比度和布局。
 
 ## project
