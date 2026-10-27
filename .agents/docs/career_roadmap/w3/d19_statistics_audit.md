@@ -1,15 +1,10 @@
 ---
 source_files:
-  - nanochat/engine.py
-  - nanochat/gpt.py
-  - nanochat/checkpoint_manager.py
-  - nanochat/flash_attention.py
-  - scripts/infer_bench.py
-  - tests/test_engine.py
-  - tests/test_attention_fallback.py
+  - .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py
+  - .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py
 doc_type: tutorial
 knowledge_role: supporting
-knowledge_scope: W3第5日实操与验收
+knowledge_scope: W3第5日学习与实践
 ---
 
 # W3 D5 · 逐行审计和统计复算
@@ -26,127 +21,133 @@ knowledge_scope: W3第5日实操与验收
 
 **读完能解释**：<abbr title="BPB / Bits per Byte · 每字节比特数；用有效目标负对数似然和字节数衡量预测误差。">BPB</abbr>、任务准确率与 <abbr title="TPOT / Time per Output Token · 首词元之后的平均输出间隔；具体统计以当日协议为准。">TPOT</abbr> 分别评价什么？为什么一个指标变好不代表另外两个也变好？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
-## 开始前：固定终端和记录方式
+## 今天学什么，做到哪里算完成
 
-本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+今天从逐次 raw 得到可反查的统计结论，约 60–90 分钟。使用 D17/D18 或 W2 已有 CPU 随机模型记录，**只读数据，不训练、不要求 GPU 或 checkpoint**。聚合只需 Python 标准库。尚无 raw 时先完成下面的纸面统计，再返回 D17 的小实验；不能拿计划矩阵生成测量结果。
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+## 1. 先分清两个统计层级
+
+一次运行 G=4，首个输出等 10ms，后续间隔 `[2,3,4]ms`：elapsed=19ms，TPOT=3ms，B1 整体吞吐约 `4/0.019=210.53 token/s`。先算每次运行的指标，再对同组正式运行统计。
+
+假设五次运行各自的 TPOT 排序为 `[2,3,3,4,8]ms`，中位数为 3ms，min=2ms，max=8ms。<abbr title="P95 · 第95百分位；本脚本采用 nearest-rank：排序后取第 ceil(0.95×n) 个数，Python 下标还需减1。">P95</abbr> 取第 `ceil(0.95×5)=5` 个，即 8ms。五个样本的 P95 就是最大值，只描述这五次，不能当成稳定尾延迟或服务承诺。以上都是教学数值，不是本机成绩。
+
+把所有运行的 decode 间隔倒在一起求中位数，是“间隔”的统计；每 run 先取均值再求中位数，是“运行平均间隔”的统计。即使偶然算得相同，也不是同一定义。当前脚本采用后者；也不通过“总有效数/总时间”代替逐 run 吞吐的中位数。
+
+## 2. 带读：从一条 raw 到一个统计组
+
+打开[聚合脚本](scripts/d13_aggregate.py)，按以下执行顺序读：
+
+1. `glob` 只读取指定目录的 `dNN_p*_g*_b*.jsonl`，兼容旧 `p*_g*_b*.jsonl`，不递归；`d16_matrix.jsonl` 不匹配。每条 run_id 必须存在且全输入唯一，坏 JSON 或重复 ID 会中止，不能保证总有完整 audit 输出。
+2. 组键 `KEYS` 包括 session、设备/模型类型、来源/tag/step、指纹、seed、输入、精度、后端、P/G/B，再加入完整 env 和 model_config。形状相同并不自动合并；不同 session 分开统计。
+3. 预热行单独登记，不计入 `n_total` 与 audit；正式行交给 `metrics`。它检查 schema、状态、上下文、G 列、G−1 个间隔、B 行均有效输出 G 个 token，以及正且有限的时间。
+4. `elapsed≈TTFT+sum(decode_step_ms)` 使用相对 3% 或绝对 0.5ms 的容差。通过后从间隔重算 TPOT、从有效数和 elapsed 重算吞吐，不盲信 raw 中已存的汇总字段。
+
+```python
+valid = [values for _, values, _ in entries if values is not None]
+# 然后分别对每 run 的指标做 median、p95、min、max
+# 非预热行：n_total = n_valid + n_excluded
+```
+
+这里是结构核验，不是对原始执行真实性的独立证明。脚本没有重新执行 Engine，也没有保存并核查全部 token/mask；不能把它描述成“证明任何 raw 都真实”。`timing_scope`、`batch_semantics` 等也没有全部加入组键，仍需人工核对，不能只看 CSV 标签。
+
+## 3. 选择明确的输入范围再聚合
+
+D17/D18 新测的默认目录是 `experiments/inference_infra/results/raw/w3_cpu_attempt01`。复用 W2 时，将下方 `--raw-dir` 改成真实目录；若为上级 raw，脚本会读该目录全部匹配文件而非只读两份，须核对所有分组。也可将明确选择的原始文件复制到全新隔离输入目录，保留原名与内容，登记原来源，避免重复副本；不要拼接整个目录树或改 run_id。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+mkdir -p experiments/inference_infra/reports
 {
-python -c "import sys; print(sys.executable)"
-git status --short
+python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
+  --raw-dir experiments/inference_infra/results/raw/w3_cpu_attempt01 \
+  --output experiments/inference_infra/results/summary/d19_baseline.csv \
+  --audit experiments/inference_infra/results/summary/d19_baseline_audit.jsonl
+D19_RC=$?
+printf 'aggregate_exit=%s\n' "$D19_RC"
 } > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
 ```
 
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
+它不改 raw，但会重写指定 CSV/audit；需要保留旧汇总就换新输出名。只有预热、无匹配文件等会报错。存在全失败组时可生成 `NO_VALID_SAMPLES` 行，这比悄悄丢弃失败更有用。CPU 的 CUDA 显存统计为空，不填 0。
 
-本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
+## 4. 先读样本数，再读结论标签
 
-## 今天的目标（约 3 小时）
+| 字段或状态 | 应怎样解释 |
+|---|---|
+| n_total / n_valid / n_excluded | 非预热总数、有效数、排除数；核对相加关系 |
+| warmup_status=OK | 同组有效正式样本所用 session 至少三次预热且全部状态/schema 合格；不是对每个预热完整复算 metrics |
+| CPU_OR_RANDOM_CONTRACT | 有有效 CPU 或随机模型记录，不能升级为 GPU 权重基线；**标签本身不保证满五次或预热充分** |
+| GPU_BASELINE | CUDA checkpoint 组满足至少五次有效正式记录及预热门槛；仍不证明能力或优化收益 |
+| INSUFFICIENT_WARMUP / INSUFFICIENT_SAMPLES | CUDA checkpoint 组相应门槛不足；不是零延迟 |
+| NO_VALID_SAMPLES | 没有有效正式样本，应查失败而非填写性能数字 |
 
-今天从 raw 重新计算结果，确保每个表格数字都能追到原始行。<abbr title="JSONL / JSON Lines · 每行一个JSON对象的文本格式；一行对应一次运行，失败行和预热行也单独保存。">JSONL</abbr> 方便追加，但同一文件重复执行会混入多轮；必须检查 run_id 和实验条件。<abbr title="Median · 中位数；数据排序后居中的值，偶数样本取中间两值平均。相比最小值更能表示典型一次运行。">median</abbr> 代表典型运行，不是最好的一次成绩。
+主线约定至少 3 次成功预热、5 次有效正式运行，也要对 CPU 组显式检查这两个字段。不是所有脚本状态都替你执行了全部验收条件。
 
-前置：至少有一个真正生成的 raw 文件；只有 PENDING_GPU 清单时不能产出性能 CSV。时间分配：30 分钟筛选文件，40 分钟聚合，40 分钟抽样复算，40 分钟检查失败与结论。
+## 5. 从 CSV 反查一条真正的证据
 
-## 第一步：选择一个独立条件的 raw 目录
-
-使用[统计审计脚本](scripts/d13_aggregate.py)。它读取所给目录下 `dNN_p*_g*_b*.jsonl`（兼容迁移前 `p*_g*_b*.jsonl`），不递归，也不把计划矩阵当原始测量。CPU 契约示例使用上级 raw 目录；GPU B1/B4 各自 attempt 目录应分别运行，防止未经检查混并。
+下面读 CSV 的计数，再从 audit 选择一个纳入的行，按它的绝对路径和行号回读 raw；不运行模型：
 
 ```bash
 {
-python .agents/docs/career_roadmap/w3/scripts/d13_aggregate.py \
-  --raw-dir experiments/inference_infra/results/raw \
-  --output experiments/inference_infra/results/summary/d19_baseline.csv \
-  --audit experiments/inference_infra/results/summary/d19_baseline_audit.jsonl
+python - <<'PY'
+import csv, json
+from pathlib import Path
+summary = Path('experiments/inference_infra/results/summary/d19_baseline.csv')
+for r in csv.DictReader(summary.open()):
+    print({k:r[k] for k in ('session_id','batch_size','n_total','n_valid','n_excluded','warmup_status','conclusion_status')})
+audit = Path('experiments/inference_infra/results/summary/d19_baseline_audit.jsonl')
+items = [json.loads(s) for s in audit.read_text().splitlines()]
+a = next((x for x in items if x['included']), None)
+if a:
+    r = json.loads(Path(a['file']).read_text().splitlines()[a['line']-1])
+    assert r['run_id'] == a['run_id']
+    print('provenance:', a)
+    print('recomputed:', r['ttft_ms'], sum(r['decode_step_ms'])/len(r['decode_step_ms']) if r['decode_step_ms'] else None,
+          r['generated_tokens']*1000/r['elapsed_ms'])
+else:
+    print('No included row; inspect exclusion reasons:', items)
+PY
 } > >(tee -a experiments/inference_infra/reports/d19_checks.log) 2>&1
 ```
 
-若你实际数据在 `w3_b1_attempt01`，修改 raw-dir，同时用独立输出名 `experiments/inference_infra/results/summary/d19_baseline_b1.csv`（审计另用 `experiments/inference_infra/results/summary/d19_baseline_b1_audit.jsonl`；B4分别使用 `experiments/inference_infra/results/summary/d19_baseline_b4.csv` 和 `experiments/inference_infra/results/summary/d19_baseline_b4_audit.jsonl`）；B4 同理。只有正式合并时才按明确的记录清单复制或汇总到新目录，并检查相同 checkpoint/硬件/软件/后端；不要用 `cat` 盲目拼整个 raw 树。
+这完成“结论 → 组 → audit → raw”的反查。audit 的路径依赖当前机器；交给别人时需要保留 raw 并说明原路径映射，或在新位置重新聚合。不要只交 CSV 后声称能独立重建。
 
-预期提示 `N groups -> ...`。没有匹配文件时明确报错；这比输出空表伪装完成更有用。脚本不修改 raw；会重写指定 summary 和 audit，因此保留要对照的旧版时先选新输出文件名。
-
-## 第二步：理解脚本的统计定义
-
-<abbr title="P95 · 经验第95百分位；本脚本采用nearest-rank，排序后取ceil(0.95×n)处的值。n=5时等于最大值，仅是少量样本描述，不是稳定尾延迟估计。">P95</abbr> 与 min/max 一起报告。5 次样本的 P95 恰为最大值，不要写成有可靠 95% 服务保障。
-
-每次运行的指标从原始字段重算：
-
-- TTFT：`ttft_ms`，第一次 next 到首 yield 同步后的时间。
-- TPOT：`mean(decode_step_ms)`，G−1 个后续 token 列的算术平均；B4 不再除以 4，因为这是用户等待每个生成步的时间。
-- tokens/s：`generated_tokens / (elapsed_ms/1000)`，全部有效输出 token 除以首 next 至最后 yield 的端到端时间，包含 TTFT；不包括 prompt token。
-
-表中的中位数与 P95 都先算每次运行的指标，再跨有效正式运行统计。没有将全部 decode step 混起来算某个“总体 TPOT”。上游 infer_bench 使用逐步时间中位数和不含首步的 decode 吞吐，与此处定义不同，不能混表比较。
-
-## 第三步：核查哪些行被排除
-
-脚本要求：phase=measure、status=ok、实际 G 步、G−1 个后续时间、B 行均有效生成 G 个 token、正且有限的耗时、合法上下文、总时间大致等于 TTFT 加后续时间。非预热行中的提前结束、强制 token 导致计数不足、错误、截断和非法时间都写入 audit 的排除原因。预热不计入正式样本，但仍检查 run_id 是否重复，并要求正式GPU结论所用session至少3次成功预热。未知schema_version的正式行标invalid并留审计记录。表中另保留有效行的peak_allocated_bytes和peak_reserved_bytes的median/min/max；CPU字段为空，不填0。
-
-组键包含 session_id、模型权重与tokenizer哈希、来源与 step、seed、模式、设备、精度、后端、P/G/B、完整 env 和 model_config，环境不同或重复session不会仅因为形状相同就合并。没有有效正式样本标 `NO_VALID_SAMPLES`；有有效行的 CPU 或 random 模型标 `CPU_OR_RANDOM_CONTRACT`。有有效行的 GPU checkpoint 组若同session不足3次成功预热或有失败预热，优先标 `INSUFFICIENT_WARMUP`；预热满足但有效正式行少于5时标 `INSUFFICIENT_SAMPLES`。`GPU_BASELINE` 只证明样本结构满足条件，仍需人工确认权重哈希、输入和背景负载。
-
-## 第四步：手算一个小例子核对单位
-
-教学例子不是测量结果：假设 B=1、G=4，TTFT=10ms，decode step=[2,3,4]ms，则 elapsed≈19ms，TPOT=3ms，吞吐=4/0.019≈210.53 token/s。B=4 且每行完整4个 token 时，分子是16，但绝不能提前假定 elapsed仍19ms。
-
-抽取一个真实 run_id，用计算器按同样公式复算，然后在聊天给出文件、行号、run_id、原始值、公式、自动表对应组键和差异；可选整理到 `experiments/inference_infra/reports/d19_statistics_audit.md`，不要求另写报告。基准程序另存的 tpot/tokens_per_s 与复算值不一致时先核查定义，不改 raw 数字迎合表格。
-
-## 失败分流与验收
-
-- run_id 重复：确定是否重复复制文件，移除重复副本而不是修改 run_id 制造新样本。
-- JSON损坏：定位行号并保留损坏原件，追查中断/写入原因；不要删掉后声称样本完整。
-- n_valid=0：保留该组失败数，下一次修复后重跑新 attempt。
-- 没有 GPU：基线表明确 CPU 契约，不画 GPU 加速图，不把 pending 填0。
-
-验收：d19_baseline.csv 存在或有无数据阻塞说明；每个有效统计带 run_ids；每个被排除的非预热行有 audit 原因，预热另从 raw 核查；单位、P95方法、样本数、失败数和设备明确。下一天用真实通过的命令写复现入口。
+重复 run_id 时查是否重复复制；坏 JSON 时保留原件和行号排查写入中断；不足五次就如实报告，不删失败、不改 ID 凑样本。无需为回答问题故意制造错误。
 
 ## 本日脚本与产物清单
 
-下列路径以项目根目录为基准；脚本编号保留首次使用日。外部历史归档与上游 checkpoint 原生文件名保留，按正文真实绝对路径或环境变量解析；不冒充项目新产物。<abbr title="条件生成：只有指定分支执行、前置文件满足且实际写入后，文件才算存在；清单中的目标路径本身不证明生成成功。">条件生成</abbr>须在验收时核对。只打印的检查统一进入本日 checks 日志，不另称生成报告。
+路径相对于项目根目录，只有选择并成功运行相应命令才生成；失败组可以被保留在汇总内。
 
-| 脚本完整项目相对路径 | 用途 | 阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|---|
-| [.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py](scripts/d13_aggregate.py) | 逐行审计并重算统计 | 第1–3步 | --raw-dir 的真实测量文件；不读计划矩阵 | 标准库；至少一条正式行，只有预热或无raw时报错 |
+| 脚本完整路径 | 用途与输入 | 条件 |
+|---|---|---|
+| [.agents/docs/career_roadmap/w3/scripts/d13_aggregate.py](scripts/d13_aggregate.py) | 从匹配 raw 复算统计与审计 | Python 标准库，至少存在非预热记录；不读取矩阵 |
 
-| 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/reports/d19_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
-| `experiments/inference_infra/results/summary/d19_baseline.csv` | 独立条件的统计表 | d13_aggregate.py --output | 条件生成；有测量组时生成，可含无有效样本组 |
-| `experiments/inference_infra/results/summary/d19_baseline_audit.jsonl` | 逐行纳入/排除原因 | d13_aggregate.py --audit | 随统计成功自动生成 |
-| `experiments/inference_infra/results/summary/d19_baseline_b1.csv` | B1 独立目录汇总 | d13_aggregate.py --output | 条件生成；仅选择 B1 attempt 目录并指定此输出时 |
-| `experiments/inference_infra/results/summary/d19_baseline_b1_audit.jsonl` | B1 逐行审计 | d13_aggregate.py --audit | 随对应 B1 统计成功生成 |
-| `experiments/inference_infra/results/summary/d19_baseline_b4.csv` | B4 独立目录汇总 | d13_aggregate.py --output | 条件生成；仅选择 B4 attempt 目录并指定此输出时 |
-| `experiments/inference_infra/results/summary/d19_baseline_b4_audit.jsonl` | B4 逐行审计 | d13_aggregate.py --audit | 随对应 B4 统计成功生成 |
-| `experiments/inference_infra/reports/d19_statistics_audit.md` | 人工抽取 run_id 复算记录 | 第4步交流后自愿整理 | 可选人工笔记，聊天中的复算可替代 |
+| 产物完整路径 | 生成者 | 含义与条件 |
+|---|---|---|
+| `experiments/inference_infra/results/summary/d19_baseline.csv` | 聚合脚本 --output | 有测量组时生成，可包含无有效样本组；会重写目标 |
+| `experiments/inference_infra/results/summary/d19_baseline_audit.jsonl` | 聚合脚本 --audit | 非预热行纳入/排除及来源；预热仍查 raw |
+| `experiments/inference_infra/reports/d19_checks.log` | 本日局部命令组 tee | 命令输出、错误与退出码 |
+| `experiments/inference_infra/reports/d19_statistics_audit.md` | 本人自愿整理 | 可选复算笔记，聊天可替代 |
 
 ## 本日自验证与交流
 
-按题号在聊天中回答即可，预计交流约 20–25 分钟，不要求另写报告。开头一次给出本次 raw、CSV、audit 的对应关系与日期/版本，之后用关键行和 run_id 支撑推导，不必重复环境与路径。未执行的实测项标 `PENDING`；没有真实 raw 时说明阻塞，假设题仍可回答；不得从待执行矩阵生成或填写性能结果，也不要求补跑 GPU。
+1. 五次 TPOT `[2,3,3,4,8]ms` 的中位数/P95 是多少？把 8ms 写成“95% 服务保障”缺少什么？
 
-1. 两条记录的 P/G/B 相同就能一起算中位数吗？请从实际输入中找一对记录，判断它们是否属于同一个统计组。
+   **核对要点**：给出排序与排名，说明样本很少、非服务请求分布，不把经验分位数当承诺。
 
-   **核对要点**：依据聚合脚本组键解释决定性差异，特别注意 session、模型/词表身份、输入、实际后端和环境；不能只看文件名或形状。说明本次输入目录为何不会无意混进别的 attempt；缺少第二条可对照记录时可明确假设一个差异后推演。
+2. 任选实际组，核对总数、有效数、排除数，并反查一个 run_id；为什么预热不在 audit 中？
 
-2. 任选一个统计组，核对“总数 = 有效数 + 排除数”，并沿 audit 解释一条行记录为何纳入或排除。
+   **核对要点**：沿脚本分支与原始行定位；全成功就查纳入原因，无需造失败。
 
-   **核对要点**：把 CSV 的计数与有效 run_ids、audit 的文件/行号对应，说明预热另从 raw 核查，不进入该组正式行总数；`status=ok` 仍须满足内容完整性。若全为有效行就检查一条纳入原因，无需制造失败；坏 JSON 或重复 run_id 导致聚合中止时，不能声称已生成完整审计。
+3. 如果 CPU_OR_RANDOM_CONTRACT 组只有两次有效正式行，你会称其满足本周重复测量约定吗？
 
-3. 选一个真实统计组，说明怎样从各 run 的 decode_step_ms 得到本组 TPOT 中位数与 P95。如果直接把所有 decode 间隔放在一起求中位数，还是同一个统计对象吗？
+   **核对要点**：不会；标签说明证据范围，仍须检查 n_valid 和 warmup_status。
 
-   **核对要点**：复用 D13 已确认的单行复算和分位数规则，不必重抄逐步时间；列出该组每 run 的 TPOT 样本及组中位数/P95，与 CSV 对应。解释两个聚合层级的区别，数值偶合也不能证明定义相同；没有有效组时只做标明假设的推导。
+4. 两份 P/G/B 一样的文件为什么可能分成不同组？把文件搬到另一台机器，怎样让统计仍可追溯？
 
-4. 看实际的 `conclusion_status`，你同意当前组被称为 GPU 基线吗？如果是 GPU checkpoint、6 次正式行有效，但同 session 仅有 2 次成功预热，结论应如何变化？
+   **核对要点**：session/env/模型身份等；保留 raw 与来源，重新聚合或映射路径，不仅交 summary。
 
-   **核对要点**：结合设备/模型类型、有效正式数与预热条件作判断，并按脚本分支验证假设，不把 CPU/random 或样本不足写成正式 GPU 结果。即使结构门槛满足，也说清仍需人工核查的模型身份、背景负载和测量边界；状态标签本身不证明性能优化或模型能力提升。
+## 完成核对
 
-## 核对记录与完成标记
-
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
-
-- [ ] 输入条件与前一天产物已核实。
-- [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
-- [ ] 示例数值与真实结果已区分，失败和待测未删除。
-- [ ] 能说明本日证据证明什么、尚不能证明什么。
+- [ ] 能先算单 run，再算组中位数/P95。
+- [ ] 实际输入范围明确，计数、纳入原因与原始行可反查。
+- [ ] CPU 结论范围与样本充分性分开核查，没有虚构 GPU 数据。
