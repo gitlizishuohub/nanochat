@@ -1,18 +1,14 @@
 ---
 source_files:
   - nanochat/engine.py
-  - nanochat/gpt.py
-  - nanochat/checkpoint_manager.py
-  - nanochat/flash_attention.py
-  - scripts/infer_bench.py
-  - tests/test_engine.py
-  - tests/test_attention_fallback.py
+  - .agents/docs/career_roadmap/w3/scripts/d16_matrix.py
+  - .agents/docs/career_roadmap/w2/scripts/d12_benchmark.py
 doc_type: tutorial
 knowledge_role: supporting
-knowledge_scope: W3第2日实操与验收
+knowledge_scope: W3第2日学习与实践
 ---
 
-# W3 D2 · 冻结 checkpoint 与基线矩阵
+# W3 D2 · 设计可比较的实验与基线矩阵
 
 [上一日](d15_resume_draft.md) · [下一日](d17_single_batch_runs.md)。
 
@@ -26,142 +22,120 @@ knowledge_scope: W3第2日实操与验收
 
 **读完能解释**：为什么只记一个 d4 标签不够？你的基线还需要固定哪些身份信息和输入条件？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
 
-## 开始前：固定终端和记录方式
+## 今天学什么，做到哪里算完成
 
-本日命令均从 nanochat 仓库根执行。当前终端会自动激活 nanochat 环境，无需重复激活；先核对解释器路径，不创建另一个 `.venv`。
+今天学习设计可比较的实验，约 60–90 分钟。**主线是纸面矩阵与容量推导，不操作模型，不要求训练、GPU 或 checkpoint**。明天的 CPU 小实验也不依赖真实权重。拥有并选择使用训练权重时，才进入文末计划工具分支。
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+<abbr title="Baseline · 基线；固定对象、输入与方法后得到的参照结果。计划仅规定未来如何测量，还没有测量结果。">基线</abbr>不是某个文件名；它需要说明测的是谁、什么输入、怎样计时。今天完成比较设计即达标，无需把全部候选跑一遍。
+
+## 1. 先判断两个数字是否回答同一个问题
+
+假设甲用随机小模型 CPU、P=8/G=4/B=1；乙用训练模型 GPU、P=512/G=128/B=4。乙吞吐更高，也不能归因于“乙实现了更好的缓存”，因为模型、设备和工作量同时改变。
+
+明天主线固定随机模型配置、seed=42、CPU float32、线程数、普通 fill ID=1、P=8/G=4；后天只改变 B。仍需从 raw 核对实际配置、后端、环境是否一致。即使随机 seed 相同，也不是跨版本逐位相同参数的保证；版本与初始化实现要一致。
+
+真实 <abbr title="Checkpoint · 模型检查点；需匹配权重、模型配置和分词器。仅有配置 JSON 不能证明权重存在或可加载。">checkpoint</abbr> 分支另固定 source、model_tag、step、配置、权重及 tokenizer 指纹。标签叫 d4 或词表大小一样都不足以识别同一模型。MiniMind 权重不能直接作为 nanochat 权重使用。
+
+## 2. 纸面推导 12 个候选格
+
+P 是提示 token 数，G 是要求输出的最大列数，B 是同一提示的样本行数。先假设固定 `sequence_len=128`，不运行命令：
+
+| P | G | P+G | 上下文 128 | 上下文 256 |
+|---|---|---|---|---|
+| 32 | 32 | 64 | 合法 | 合法 |
+| 32 | 128 | 160 | 拒绝 | 合法 |
+| 128 | 32 | 160 | 拒绝 | 合法 |
+| 128 | 128 | 256 | 拒绝 | 合法 |
+| 512 | 32 | 544 | 拒绝 | 拒绝 |
+| 512 | 128 | 640 | 拒绝 | 拒绝 |
+
+每行各取 B=1/4，合计 12 格。128 上下文有 2 格合法、10 格拒绝；256 上下文有 8 格合法、4 格拒绝。B 不改变每行长度约束，但会改变缓存量。
+
+这里遵守基准约定 `P+G<=sequence_len`；不能悄悄截短后还保留 P512 的名字。长度合法只是必要条件，不保证内存足够或生成不提前结束。RoPE 预计算更长也不能替代既定上下文约束。
+
+## 3. 从 Engine 的两次分配推导容量
+
+[Engine.generate](../../../../nanochat/engine.py)先以 B=1、T=P 建立 prefill 缓存，再以 B 行、T=P+G 建解码缓存并复制。<abbr title="KV Cache · 键值缓存；每层保存历史位置的 K/V。GQA 使用较少 K/V 头，缓存头数应取 n_kv_head。">K/V</abbr> 主项是 `2×L×B×T×Hkv×Dh×s` 字节，其中 Dh=`n_embd/n_head`，s 是每元素字节数。
+
+做一个假设算例：L=2，Hkv=2，Dh=32，float32 的 s=4，P=8，G=4，B=4。解码缓存为 `2×2×4×12×2×32×4=49152` 字节，即 48 KiB；prefill 为 `2×2×1×8×2×32×4=8192` 字节，即 8 KiB。复制阶段两份共存，主项 56 KiB。这只是玩具配置容量推演，不是实测峰值。
+
+对照 `kv_cache_decode.prefill(kv_cache_prefill)` 后的 `del kv_cache_prefill`：复制前后生命周期解释了为何要暂时相加。还未计入权重、激活、logits、RoPE、`prev_embedding` 和分配器保留块，所以容量公式不能承诺“不 OOM”。滑窗缩小读取范围，也不自动缩小这里按完整 T 分配的缓存。
+
+## 4. 带读计划工具的三个判断
+
+打开[矩阵驱动](scripts/d16_matrix.py)，重点顺序是：
+
+```python
+supported = prompt + generation <= limit
+# 之后，只有同时满足三个条件才调用 subprocess.run：
+# supported and args.execute
+# and (args.batch is None or b == args.batch)
+```
+
+`--execute` 缺省为 false，所以默认只写 12 行矩阵，不启动模型。`--batch 1` 只是筛选执行子集，B4 仍保留计划行。上下文非法先记 `INVALID_CONTEXT`；支持的未执行行按目标设备记 `PENDING_CPU` 或 `PENDING_GPU`。这些是**所选计划的脚本状态**，不表示你每天必须补做对应设备。
+
+子进程退出 0 时记 `PROCESS_OK`；它不直接检查 raw 是否有至少五次有效正式测量，后续还要 D19 审计。`raw_file` 字段只是未来目标路径，不能据此声称文件已存在。
+
+## 5. 主线收束与可选真实权重计划
+
+主线在聊天给出：两个上下文的合法格数量、上面的缓存推导、明后天只改变 B 的协议。无需创建假 meta，也无需写报告；没有 checkpoint 不阻塞本日。
+
+只有手头已有可加载的真实 nanochat 权重、同 step meta 和匹配 tokenizer，且想练习计划工具时执行以下分支。先将本机值改成真实已核查的身份；示例 tag/step 仅适用于确实做过 W2 可选两步 smoke 的情况，不要求去补训练。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
-mkdir -p experiments/inference_infra/reports experiments/inference_infra/results/raw experiments/inference_infra/results/summary
+mkdir -p experiments/inference_infra/reports
 {
-python -c "import sys; print(sys.executable)"
-git status --short
-} > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
-```
-
-解释器应指向 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。依赖是否已装好要另查，激活成功不代表 PyTorch 可用。保留已有改动，遇到未认识的变更不要还原。教程脚本保存在本周 `scripts/`，结果写入 `experiments/inference_infra/`，两者不能混为同一类产物。
-
-本日验证完成后，直接按文末“本日自验证与交流”逐题和我交流，附关键输出或自动日志/原始结果路径即可。无需手写报告，也不要求固定排版或长文。实际日期、设备、命令参数与退出码以日志和聊天核对；标题里的 W3 Dn 是学习顺序，不倒填完成状态。若想自行整理，可选用 `experiments/inference_infra/reports/d15_experiment-log.md`，后续跨日也可引用本次聊天和自动结果。
-
-## 今天的目标和前置（约 3 小时）
-
-前置：W2 有可加载的 nanochat checkpoint、配套 tokenizer 和 `meta_NNNNNN.json`。今天把“测什么”冻结成 12 个候选组合，先检查再运行。P 是输入 token 数，G 是要求生成的步数，B 是同一提示词的生成样本数；这里不是 B 条独立提示词的服务端并发吞吐。
-
-分配：40 分钟核对模型，40 分钟生成矩阵，40 分钟估算内存，40 分钟核对协议与交流。<abbr title="Checkpoint · 检查点；本项目由模型权重与 JSON 元数据等配套文件构成。必须与 nanochat 架构和 tokenizer 匹配，不能直接加载 MiniMind 权重。">checkpoint</abbr> 必须有固定 source、model_tag 和 step；省略后自动选择最大模型或最新 step 会导致重跑时换模型。
-
-## 第一步：找出你实际使用的文件
-
-从 W2 训练日志抄录 `NANOCHAT_BASE_DIR`、model_tag 和 step。下面的 `d11_w2_20`、`20` 仅演示如何填变量，不表示这台机器已有对应 checkpoint；先把它们替换成 W2 验收过的值。
-
-```bash
-{
-export NANOCHAT_BASE_DIR=/实际/nanochat缓存根目录
-MODEL_TAG=d11_w2_20
-CHECKPOINT_STEP=20
+export NANOCHAT_BASE_DIR=/替换为已核查的缓存根
+MODEL_TAG=d10_w2_smoke
+CHECKPOINT_STEP=2
 META="$NANOCHAT_BASE_DIR/base_checkpoints/$MODEL_TAG/meta_$(printf '%06d' "$CHECKPOINT_STEP").json"
-python -m json.tool "$META"
-sha256sum "$META"
-} > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
-```
-
-读取 `model_config.sequence_len`，再核对 `vocab_size/n_layer/n_head/n_kv_head/n_embd/window_pattern`。`P+G<=sequence_len` 是本周人为固定的可比较范围；不能用模型 RoPE 预计算更长作为超出训练上下文仍有效的证明。Meta 不能证明权重存在，还需核对同 step 的 `model_NNNNNN.pt` 与 W2 加载成功日志。
-
-## 第二步：仅生成计划，不自动执行
-
-使用[矩阵驱动脚本](scripts/d16_matrix.py)。脚本复用[W2 基准程序](../w2/scripts/d12_benchmark.py)，默认只生成清单，既不租 GPU 也不启动训练。
-
-```bash
-{
 python .agents/docs/career_roadmap/w3/scripts/d16_matrix.py \
-  --artifact-day 16 --meta "$META" --source base --model-tag "$MODEL_TAG" --step "$CHECKPOINT_STEP" \
+  --artifact-day 16 --meta "$META" --source base \
+  --model-tag "$MODEL_TAG" --step "$CHECKPOINT_STEP" --device cpu \
   --output-dir experiments/inference_infra/results/raw/w3_plan
+D16_RC=$?
+printf 'plan_exit=%s\n' "$D16_RC"
 } > >(tee -a experiments/inference_infra/reports/d16_checks.log) 2>&1
 ```
 
-`--artifact-day 16` 标记本次新计划的首次生成日；后续复用此脚本新建执行目录时使用当天编号，已有文件不改号。默认计划不生成 raw 或子进程 log。
-
-预期打印 12 个 case：`P=32/128/512` × `G=32/128` × `B=1/4`。可用上下文的行标 `PENDING_GPU`，超出上下文标 `INVALID_CONTEXT`。例如 sequence_len=128 时只有 P32+G32 可行，其他不能偷偷截短成同名 P128/P512。矩阵中的 command 是参数数组，便于复核，没有 shell 字符串拼接执行。
-
-W2基准默认使用 `[BOS]+[1]×(P−1)` 的固定合成token输入，主要控制计算工作量，不是自然语言质量测试；原始行含prompt_sha256和prompt_fill_id。正式对比必须固定这一构造，若为排查提前终止更换fill ID则作为新输入实验，不能混入旧组。
-
-打开 `experiments/inference_infra/results/raw/w3_plan/d16_matrix.jsonl` 检查每行 `sequence_len` 和 `raw_file`。`--output-dir` 每次使用新目录，已有矩阵时拒绝覆盖，避免失败证据丢失。本周 W2 包装器的 source 仅允许 `base`；生产加载器另支持 sft/rl，但当前教程不扩展该分支。上游 infer_bench 帮助里出现的 `mid` 不能直接沿用。
-
-## 第三步：手算缓存，预估而非承诺显存
-
-<abbr title="GQA / Grouped-Query Attention · 分组查询注意力；多组 Q 共享较少的 K/V 头。缓存按 n_kv_head 存储，不能按 n_head 直接估算。">GQA</abbr> 下缓存主项的字节数为：`2 × L × B × T × Hkv × Dh × s`。2 表示 K 和 V，L 是层数，Dh=`n_embd/n_head`，s 是计算 dtype 每元素字节数。<abbr title="dtype / Data type · 数据类型；float32 每元素4字节，bfloat16每元素2字节。参数dtype、计算dtype和缓存dtype可能不同，应分别记录。">dtype</abbr> 必须读取实际环境与运行记录，不能因为文件是 bf16 就认定运行所有部分都 bf16。
-
-Engine 先建 batch=1、T=P 的预填缓存，再建 batch=B、T=P+G 的解码缓存并复制，因此复制阶段同时存在两个缓存：缓存峰值主项约 `2×L×Hkv×Dh×s×(P+B×(P+G))`。窗口注意力减少读取范围，但此 Engine 的分配仍按完整 T；不要把滑窗长度直接代入分配容量。
-
-这还不包括权重、logits、激活、RoPE、prev_embedding、allocator 保留块和 CUDA context。在聊天给出公式、配置、s 的来源和粗估值，实测峰值另列；可选整理到 `experiments/inference_infra/d12_protocol.md`。模型很小时 `vocab_size` 大仍可能使 logits/权重占显著内存。
-
-## 第四步：冻结运行协议
-
-先在聊天或既有自动记录中明确以下条件，后续据此恢复变量与比较实验；无需额外报告。若希望留文件，可选在 W2 `d12_protocol.md` 追加 W3 小节。以下是核查项目，不要求逐项另抄一份：
-
-```text
-模型：source/model_tag/step；meta和权重SHA-256；tokenizer来源与哈希
-输入：P集合、G集合、B集合；prompt构造方法与实际token长度
-采样：temperature=0、seed=42；Engine工具/结束规则
-环境：解释器、torch版本、CPU/GPU型号、驱动、compute dtype、实际注意力后端
-运行：每case预热3次、正式至少5次；同一软件版本；每次next后同步
-边界：超上下文拒绝；不悄悄截断；提前结束/OOM保留
-输出：matrix.jsonl、每case raw JSONL和log；summary来自自动聚合
-```
-
-后端自动路由在 CPU 用 SDPA，CUDA 的 FA3 还受硬件、库及计算 dtype 影响；“设备有 CUDA”不等于“运行 FA3”。本驱动不强制后端，冻结实际解析出来的 `attention_backend` 与 precision，变化时另建实验目录。
-
-## 验收和阻塞处理
-
-验收不是 12 组都必须跑通，而是 12 组都有明确状态、可行组满足长度条件、模型来源与测量协议固定。缺 checkpoint 时交流缺失条件并返回 W2；不要用虚构 meta 冒充实际模型。没有 GPU 保留 `PENDING_GPU`。下一天先测 B=1，并将 CPU 功能验证与 GPU 基线分开。
+这是 CPU 目标的**计划命令，没有 `--execute`**；只读 meta、写矩阵，不加载权重或训练。即使计划成功，也需另查真实权重和 tokenizer，不能把 meta 当加载验收。已有矩阵目录拒绝覆盖，应新建尝试目录。GPU 与真实执行是另外自选扩展，本日无须运行。
 
 ## 本日脚本与产物清单
 
-下列路径以项目根目录为基准；脚本编号保留首次使用日。外部历史归档与上游 checkpoint 原生文件名保留，按正文真实绝对路径或环境变量解析；不冒充项目新产物。<abbr title="条件生成：只有指定分支执行、前置文件满足且实际写入后，文件才算存在；清单中的目标路径本身不证明生成成功。">条件生成</abbr>须在验收时核对。只打印的检查统一进入本日 checks 日志，不另称生成报告。
+路径相对于项目根目录。纸面主线不生成文件；只有选择实际分支才产生下表目标。
 
-| 脚本完整项目相对路径 | 用途 | 阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|---|
-| [.agents/docs/career_roadmap/w3/scripts/d16_matrix.py](scripts/d16_matrix.py) | 固定12个组合，按开关执行子集 | 计划/显式运行 | META 指向真实上游 meta；MODEL_TAG、CHECKPOINT_STEP | 计划需真实 meta；--execute 需权重/tokenizer，CUDA运行需GPU |
-| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 矩阵内部调用；CPU分支直接调用 | 逐次测量 | checkpoint及合成prompt；CPU示例使用随机夹具 | 依赖 PyTorch；真实基准需匹配 tokenizer |
+| 脚本完整路径 | 用途与输入 | 条件 |
+|---|---|---|
+| [.agents/docs/career_roadmap/w3/scripts/d16_matrix.py](scripts/d16_matrix.py) | 从真实 meta 生成 12 格计划 | 标准库；目标身份由本人核实；缺省不执行 |
+| [.agents/docs/career_roadmap/w2/scripts/d12_benchmark.py](../w2/scripts/d12_benchmark.py) | 驱动在显式执行时调用 | 执行才需 PyTorch、匹配资产及所选设备 |
 
-| 产物完整项目相对路径 | 用途 | 生成者/步骤 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/reports/d16_checks.log` | 环境、只读检查、命令输出及错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；退出码在聊天核对，或可选补记日志 |
-| `experiments/inference_infra/reports/d15_experiment-log.md` | 每日事实、退出码和阻塞 | 自愿整理；跨日可引用聊天和自动结果 | 可选人工笔记，不影响验收 |
-| `experiments/inference_infra/results/raw/w3_plan/d16_matrix.jsonl` | 12个候选状态、命令与原始输出目标 | d16_matrix.py | 自动生成；计划中的 raw_file 仅为目标，不保证文件存在 |
-| `experiments/inference_infra/d12_protocol.md` | 追加W3固定模型、缓存估算与测量协议 | 第3–4步 | 可选人工整理；协议也可由聊天和自动记录恢复 |
+| 产物完整路径 | 生成者 | 条件与含义 |
+|---|---|---|
+| `experiments/inference_infra/reports/d16_checks.log` | 可选命令组 tee | 局部输出、退出码；命令组后恢复终端 |
+| `experiments/inference_infra/results/raw/w3_plan/d16_matrix.jsonl` | d16_matrix.py | 选择真实 meta 计划后写入；只有计划，未生成 case raw/log |
+| `experiments/inference_infra/d12_protocol.md` | 本人自愿整理 | 可选保存固定条件和容量推导，聊天可替代 |
 
 ## 本日自验证与交流
 
-按题号在聊天中回答即可，预计交流约 15–25 分钟，不要求另写报告。开头一次给出实际采用的模型身份与证据日期/版本，后续复用同一份 meta、矩阵或日志片段；不必逐题重复环境与路径。没有真实 checkpoint 时先说明缺项，概念题可注明假设后推演，实际计划保留 `PENDING`；不要求补跑 GPU。
+1. 对照表格，若 sequence_len 变为 160，有几格合法？B 为什么不参与这一步判断？
 
-1. 同学说“我也用 d4，你的基线就能和我的直接比较”。你会先要求确认什么，哪些不一致会让这个判断失效？
+   **核对要点**：前三种 P/G 组合合法，各取两个 B 共 6 格；B 改变并行行数和内存，不改变每行 P+G。
 
-   **核对要点**：围绕“是否为同一实验对象”说明权重版本、配置和 tokenizer 映射的作用，并用自己已有记录说明如何固定身份。能解释省略 tag/step 的自动选择风险；词表大小相同或 meta 存在都不能独自证明同一模型可加载。
+2. 把容量算例的 B 从 4 改成 1，复制阶段主项是多少？它为什么不一定等于工具记录的峰值？
 
-2. 依据真实 `sequence_len`，今天 12 个候选中哪些合法、哪些应拒绝？如果它变成 256，合法集合会怎样变化？
+   **核对要点**：解码 12 KiB，prefill 8 KiB，主项 20 KiB；列出其他占用，解释两份共存时机。
 
-   **核对要点**：从 P/G/B 组合与本周上下文约束推导，给出两种情况下的合法集合或数量，并用真实矩阵关键行核对。不能用截短输入或更长 RoPE 预计算绕过既定范围；没有真实 meta 时只报告标明假设的结果，不声称计划已生成。
+3. 同学拿着 `PROCESS_OK` 说“性能基线已完成”，你还要看什么？
 
-3. 打开一个计划 case，说明从“已列入计划”到“真正开始基准”之间，还差哪些条件？只选择 B1 执行后，B4 的记录应怎样理解？
+   **核对要点**：真实 raw、有效正式次数、预热、实际配置和计数/时间；计划与子进程退出码不是统计验收。
 
-   **核对要点**：沿 `command` 与执行条件解释 `--execute`、`--batch` 和上下文检查各自作用；能从矩阵状态判断是否调用了子进程。计划中的 `raw_file` 是目标位置，不能当作测量已存在或 case 已通过。
+4. 明天若更换 fill ID、精度或后端，能否把变化都归为 B 的影响？
 
-4. 选一个 B4 组合，推导解码 K/V 分配量与复制阶段两份缓存共存的主项，给出字节数及 MiB 换算。这个估计能否保证机器装得下？
+   **核对要点**：输入或执行条件也变了，需要新实验身份；B 表示同一提示的样本数，并非独立用户请求。
 
-   **核对要点**：用配置与实际计算 dtype 确定层数、K/V 头数、头维度和元素字节数，再结合 Engine 两次分配推导；说明为何不用 Q 头数或滑窗读取长度代替缓存容量。列出至少两项未计入的显存占用；没有实测峰值就保留待测，不把估算当容量承诺。
+## 完成核对
 
-5. 明天若为避免提前结束改了 prompt 的 fill ID，或者自动后端从 SDPA 变成 FA3，还能把结果放进今天冻结的同一对照吗？你会怎样处理？
-
-   **核对要点**：解释输入工作量、实际后端变化如何影响归因，指出需要新建实验及保留的原协议；同一比较应能恢复模型、输入构造、采样、预热/正式次数和计时方式。说明当前 B 是同一提示词的样本数，不能把该计划写成独立请求服务测试。
-
-## 核对记录与完成标记
-
-本文基于当前仓库相关生成、加载、注意力路由及原基准代码编写；源码阅读不能代替执行。本教程的交付状态不表示读者已经完成当天实验。按当天问题核对真实证据后再勾选；聊天回答即可，无需额外报告：
-
-- [ ] 输入条件与前一天产物已核实。
-- [ ] 本日命令在明确设备执行，或具体阻塞已记录。
-- [ ] 自动日志和原始输出可定位，实践材料或聊天回答可回溯；可选笔记无需生成。
-- [ ] 示例数值与真实结果已区分，失败和待测未删除。
-- [ ] 能说明本日证据证明什么、尚不能证明什么。
+- [ ] 能推导合法格与缓存主项，而非只背公式。
+- [ ] 明确 CPU 主线的比较条件，分清计划和测量。
+- [ ] 未选择权重/GPU扩展时不留每日欠账；未把假设当资产事实。
