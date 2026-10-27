@@ -3,156 +3,195 @@ source_files:
   - pyproject.toml
   - nanochat/common.py
   - nanochat/dataset.py
-  - .agents/docs/career_roadmap/nanochat_daily_execution_2026-10-01.md
+  - .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py
 source_symbols:
   - get_base_dir
   - _detect_compute_dtype
+  - COMPUTE_DTYPE
 doc_type: tutorial
-knowledge_scope: W1 D2 Conda环境与硬件事实盘点
+knowledge_scope: W1 D2 解释器、运行时与资源路径
 ---
 
-# W1 D2：记录真正运行实验的环境
+# W1 D2：理解程序究竟在什么环境里运行
 
-今天自动采集环境事实，不追求模型跑得快。你需要能回答“用哪个 Python、哪个源码版本、什么设备运行”，并让另一人知道缺什么。预计 60–75 分钟：10 分钟激活环境，15 分钟采集，20 分钟解释字段，15 分钟回答当天问题，最后 10 分钟核对。
+同一份源码为什么会在一个终端成功、另一个终端报错？今天从解释器、包、设备、精度和数据路径五个条件解释这个问题，再用盘点脚本确认自己的实际条件。预计 50–75 分钟；概念推演无需操作，实际操作只采集信息、导入模块，不训练、不下载、不需要权重。CPU 环境可以完成本日全部学习，GPU 信息有则记录，没有无需补做。
 
-前置：[D1 起点复核](d01_starting_point.md)。没有 GPU 可完成全部盘点；网络不可用时保留已有环境，不反复下载。
+前置：[D1 项目全景与起点](d01_starting_point.md)。本教程沿用终端自动激活的 `nanochat` Conda 环境，避免为一次盘点再创建环境。
 
 ## 当天的流程阅读
 
-先用约 10–20 分钟读下面指定的小节，再回到当天操作；已读内容按问题回查即可。阅读只需口述理解，不新增手写报告或实验产物。
+用约 10–20 分钟阅读 [2.1 本地环境入口](../../llm-training-workflow/02-environment-and-data-preparation.md#reading-2-1)，了解环境和数据准备在完整流程中的位置，再回到下文。
 
-- **阅读入口**：[2.1 本地环境入口](../../llm-training-workflow/02-environment-and-data-preparation.md#reading-2-1)。
-- **今天重点**：只读本地环境入口，并从依赖参考中找出解释器、设备、数据根目录和计算精度分别由什么决定。按今天盘点的实际输出理解。
-- **暂时跳过**：复建用的 uv 命令只作参考；沿用已有 <abbr title="Conda · 管理独立 Python 解释器及依赖的环境工具；此处使用已有 nanochat 环境。">Conda</abbr> 环境。数据下载放到 D8。
+- **今天重点**：找出解释器、设备、数据根和计算精度分别由谁决定。
+- **暂时跳过**：复建用的 uv 命令仅作参考，不据此更换已有 Conda 环境；数据下载留到 D8 按需选择。
+- **口述自检**：Conda 环境、CPU/GPU 设备与计算精度为什么是三个不同问题？
 
-**读完能解释**：Conda 环境、CPU/GPU 设备与计算精度是同一个概念吗？你今天分别用什么输出确认它们？可直接在聊天中回答，再用本日原有自验证问题核对实际实验。
+## 1. 从“两台 Python”理解环境
 
-## 当日脚本与产物清单
+### 1.1 激活环境究竟改变了什么
 
-所有项目内路径均以 nanochat 项目根目录为基准；外部 MiniMind 只读历史证据不改名。`dNN_` 表示全程首次使用或产生日，跨日复用不改前缀；上游源码和测试保留原生名称。
+<abbr title="Conda environment · Conda 环境。包含独立 Python 解释器和包的目录；激活主要调整当前 shell 的路径与环境变量，让 python 等命令优先指向该目录。激活不等于依赖完整或 GPU 可用。">Conda 环境</abbr>可以想成一套解释器与依赖目录。假设机器上有：
 
-| 角色与脚本 | 用途与执行阶段 | 输入路径或来源 | 运行条件 |
-|---|---|---|---|
-| 入口：[`.agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py`](scripts/d02_inspect_environment.py) | 第 2 节采集解释器、依赖和硬件事实 | 项目 `pyproject.toml` 对照；读取当前 Git、环境变量、包元数据和硬件命令，无需模型文件 | 当前 Python；PyTorch 在子进程导入，缺失或失败也记录 |
+- `/usr/bin/python3`，没有安装 torch；
+- `/home/lizishuo/miniconda3/envs/nanochat/bin/python`，安装了 torch。
 
-| 完整项目相对路径 | 用途 | 生成者 | 生成方式与条件 |
-|---|---|---|---|
-| `experiments/inference_infra/results/w1/d02_environment.json` | 本次环境原始事实 | `d02_inspect_environment.py` | 自动：正常完成采集后写入 |
-| `experiments/inference_infra/d02_env.md` | 环境卡及运行范围 | 第 4 节问答可选整理 | 可选人工整理；直接聊天回答即可，不影响验收 |
-| `experiments/inference_infra/reports/d02_checks.log` | 本日终端检查输出与错误 | 各 Bash 代码块的 tee | 自动追加各代码块内的输出；命令及退出码在交流时补充 |
+两者执行同一个 `import torch` 会得到不同结果，源码并没有变化。终端里的 `python` 是命令名，最终选中哪个文件取决于 PATH；`sys.executable` 才能显示当前进程实际使用的解释器。`CONDA_PREFIX` 是环境声明，路径若与解释器不对应，应先排查激活或命令覆盖，不能只看提示符上的环境名。
 
-清单是执行后的预期，不表示文件已经存在。已有未加前缀的历史实验文件保留，新执行按上述路径写入。
+[pyproject.toml](../../../../pyproject.toml)描述的是安装要求：当前要求 Python ≥3.10、`torch==2.9.1`；CPU/GPU 可选依赖互斥，dev 组提供 pytest 等工具。<abbr title="Extra / Dependency group · 可选依赖集合与依赖组。此项目 cpu/gpu extra 选择相应 torch 来源，dev group 提供开发工具。它们是安装选择，不是硬件探测结果。">extra 与依赖组</abbr>回答“应安装什么”，盘点结果回答“现在实际有什么”，二者需要对照。
 
-正文的 `sed`、`rg`、`head`、解释器检查等只向终端打印，不会自动生成独立结果文件；各 Bash 代码块内的输出追加保存到 `experiments/inference_infra/reports/d02_checks.log`；交流时附所用命令、退出码和关键结果，自动结果已有的字段无需手抄。 盘点或探查的结构化结果保存为 <abbr title="JSON / JavaScript Object Notation · 用键值和数组组织数据的文本格式；这里保存脚本实际采集的事实或断言通过后的结果，可供程序读取。">JSON</abbr>。 未执行或失败时按真实状态记录，不能把旧同名文件当作本次成功。
+### 1.2 “包显示已安装”为什么还不够
 
-## 1. 固定解释器，不另建虚拟环境
+包版本通常来自发行包的 <abbr title="Package metadata · 包元数据。安装时记录的包名、版本等信息；读取版本可不导入包，因此能在动态库损坏等情况下仍显示版本。">元数据</abbr>。假设元数据能读到 `torch=2.9.1`，导入时却报缺少动态库：版本查询成功与模型能运行并不矛盾，它们检查的是不同层。
 
-本轮应用户要求已经创建 <abbr title="Conda environment · Conda 管理的独立 Python 环境。激活后终端中的 python 和已安装包应来自同一前缀；创建成功仅证明解释器存在，不证明全部项目依赖已安装。">Conda 环境</abbr> `nanochat`，Python 为 3.10.20。编写本指导时，CPU/dev 依赖安装已经完成，实测 PyTorch 为 `2.9.1+cpu`，CPU/FP32/SDPA 可运行，CUDA 不可用。完整安装与导入验证记录见[Conda 环境记录](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)。这只是编写时的本机事实，读者仍需重新采集自己的环境卡。当前终端会自动激活 nanochat，以后各日直接检查这一个环境，无需重复激活：
+因此判断顺序是：先确认实际解释器，再查包版本，随后确认运行时能导入，最后才检查具体行为。今天的盘点到运行时导入为止；D3 的 CPU 测试继续检查特定推理和注意力行为，其中的模型替身并不执行真实 GPT。
 
-日志只在 `{ ...; }` 命令组执行期间记录；<abbr title="Bash process substitution · 进程替换。这里把命令组的输出交给 tee，同时显示并追加到日志；重定向在命令组结束后恢复。">进程替换</abbr>不会持续接管交互终端，因此提示符和 VS Code 终端集成控制字符不会混入日志。命令组在当前 shell 执行，变量设置会保留；代码块返回最后一条命令的退出码，需核对单条命令时立即记录 `$?`。已有的显式文件重定向仍写入各自文件。复制时包含外层花括号和末尾重定向。若之前执行过旧版全局日志命令，先关闭旧终端并新开终端；仅修改文档不会停止旧终端的记录。
+### 1.3 设备与精度也不是一回事
+
+<abbr title="CUDA · NVIDIA GPU 计算平台。这里分别检查 PyTorch 构建是否含 CUDA 支持、外部驱动信息、当前进程是否可用；三者不能互相替代。">CUDA</abbr>相关信息至少有三个层次：
+
+| 观察 | 实际回答的问题 | 不能据此断言什么 |
+|---|---|---|
+| `nvidia-smi` 可显示设备和驱动 | 外部驱动工具看到了什么 | 当前 Python 一定能使用 CUDA |
+| `torch.version.cuda` 非空 | 当前 torch 构建面向哪个 CUDA 版本 | GPU 一定能被这个进程使用 |
+| `torch.cuda.is_available()` 为 true | 当前 torch 进程判断 CUDA 可用 | 你的具体模型、精度和规模一定可运行 |
+
+纸面例子：主机有 NVIDIA 卡，但当前解释器装的是 CPU 版 torch，那么 `nvidia-smi` 可以成功，而 `cuda_build=null`、`cuda_available=false`。正确判断是“这个 Python 不能做 CUDA 计算”，不能推出物理机器无卡。反过来，找不到 `nvidia-smi` 也可能只是命令不在 PATH。
+
+设备决定在哪算；<abbr title="dtype / Data type · 数值类型。float32、bfloat16 等决定数值表示和精度范围；设备相同不意味着 dtype 相同，计算类型也不必等于所有存储张量的类型。">dtype</abbr>决定用什么数值类型算。CPU 主线通常使用 <abbr title="FP32 / 32-bit Floating Point · 32 位浮点数。在本项目默认 CPU 路径用于计算；它不是 GPU 或 CUDA 的同义词。">FP32</abbr>，但环境变量也能改变项目选择，因此要读实际选择逻辑。
+
+## 2. 带读项目机制：精度和文件根从哪里来
+
+### 2.1 common.py 在导入时选择计算精度
+
+[common.py](../../../../nanochat/common.py)先定义 `_detect_compute_dtype()`，随后在模块顶层立即调用：
+
+```python
+COMPUTE_DTYPE, COMPUTE_DTYPE_REASON = _detect_compute_dtype()
+```
+
+沿函数分支推演一次，无需运行：
+
+1. 若有 `NANOCHAT_DTYPE`，按 `bfloat16`、`float16`、`float32` 的映射采用指定值。拼写错误会使映射查找失败；不要为做盘点随意设置。
+2. 否则，CUDA 可用且设备计算能力至少为 `(8,0)` 时选 `bfloat16`。
+3. 更早的 CUDA 设备回退 `float32`；没有 CUDA 也默认 `float32`。
+
+这里选择的是项目的计算类型，不代表所有参数、输出或缓存都必须同一类型。今天不需要操作低精度训练。
+
+为什么强调“导入时”？假设第一次 `import nanochat.common` 得到 `torch.float32`，之后才把 `os.environ["NANOCHAT_DTYPE"]` 改成 `bfloat16`：环境字符串变了，模块常量不会自动重算。其他文件还可能已经导入这个常量；准备新实验时，应在启动新 Python 进程前设置配置。当前盘点只读现有设置，不改变它。
+
+### 2.2 get_base_dir 管的是资源位置
+
+同一文件的实际规则为：`NANOCHAT_BASE_DIR` 非空时使用指定目录，否则使用 `~/.cache/nanochat`，并创建该目录。它不是“查有没有模型”的函数。
+
+[dataset.py](../../../../nanochat/dataset.py)在这个根下组织 `base_data_climbmix` 语料，必要时还会查旧的 `base_data`；词表与 checkpoint 也各有自己的子目录。假设甲、乙使用同一 commit，但根目录分别指向两个位置，即使代码完全一样，也可能读到不同资源或缺文件。
+
+今天只计算候选路径并检查它是否存在，不导入 dataset、不调用下载入口。目录存在只能说明位置存在，词表、语料和权重是否齐备留给 W2 分别核查；没有这些文件不影响 D3 的无权重 CPU 测试。
+
+## 3. 带读盘点脚本，再采集实际事实
+
+打开[环境盘点脚本](scripts/d02_inspect_environment.py)。它按下面顺序构建结果：
+
+```python
+packages[name] = importlib.metadata.version(name)
+# ... 收集解释器、环境变量、Git 与硬件命令 ...
+result['torch_runtime'] = command([sys.executable, '-c', code])
+```
+
+第一行只查版本；最后一行启动子进程实际导入 torch。这里使用 `sys.executable`，保证子进程复用当前 Python，不会再次凭 PATH 猜解释器。子进程异常退出时，`command()`保存 `exit_code`、stdout 和 stderr；命令启动失败或超时则保存 `error`。因此坏掉的 torch 不会让其余环境信息全部丢失。
+
+**脚本总体退出 0 只表示盘点写完，不表示 torch 可运行。** 必须继续看 `torch_runtime.exit_code`；不存在该字段时检查 `error`，非 0 时读 stderr。也不要对失败命令的 stdout 强行按 JSON 解析。
+
+### 3.1 实际操作：解释器与环境盘点
+
+以下仅导入 torch 和采集元数据，不运行模型、不更新参数。
 
 ```bash
 cd /home/lizishuo/_program_/Project/nanochat
 mkdir -p experiments/inference_infra/reports
 {
 python -c 'import sys; print(sys.executable); print(sys.version)'
+d02_python_rc=$?; echo "python_exit_code=$d02_python_rc"
 echo "$CONDA_PREFIX"
-} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
-```
-
-两个路径应分别指向 `.../envs/nanochat/bin/python` 与 `.../envs/nanochat`。若 shell 仍指向其他环境，先停止模型运行并修正激活；不要用 `uv run` 产生第二个 `.venv`，也不要因为依赖正在下载而反复创建环境。
-
-## 2. 运行盘点脚本
-
-打开[环境盘点脚本](scripts/d02_inspect_environment.py)，先看 `command()` 如何捕捉异常，再执行：
-
-```bash
-{
-python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py --help
 python .agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py
+d02_inventory_rc=$?; echo "inventory_exit_code=$d02_inventory_rc"
 } > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
 ```
 
-结果在 `experiments/inference_infra/results/w1/d02_environment.json`。脚本只读取 Git、包元数据、硬件命令，并在子进程导入 PyTorch；不下载、安装或训练。子进程导入失败会保留错误，而不是让整张环境卡消失。每次重跑覆盖同名文件，可用 `--output` 保存带日期快照。
+预期解释器是 `/home/lizishuo/miniconda3/envs/nanochat/bin/python`。以本次输出为准；[既有环境记录](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)曾确认 Python 3.10.20、torch 2.9.1+cpu，但历史安装记录不等于当前运行结果。
 
-逐项阅读 JSON：
+局部日志仅覆盖花括号内命令，结束后恢复交互终端，不持续收集提示符。退出码紧跟目标命令保存，后面 `echo` 的成功不能冒充前面命令成功；若旧终端已有全局重定向，先新开终端。
 
-| 字段 | 如何理解 | 交流时核对的内容 |
+### 3.2 怎样解释生成的 JSON
+
+结果写入 `experiments/inference_infra/results/w1/d02_environment.json`，重复执行会覆盖；用 `--output` 可另存快照。<abbr title="JSON / JavaScript Object Notation · 以对象、数组和基本值组织的文本格式；此处保存此次采集的事实，不能把同名历史文件当作新运行结果。">JSON</abbr>里的 `recorded_at` 为 UTC，聊天说明实际日期时使用本地 Asia/Shanghai。
+
+| 字段 | 读法与作用 |
+|---|---|
+| `python`、`conda_prefix`、`packages` | 检查解释器与安装内容；N/A 是当前解释器找不到发行包，不是用预期版本代填 |
+| `git_head.stdout`、`git_status.stdout` | commit 固定已提交源码；工作区改动还可能改变实际行为，两者都要保留 |
+| `torch_runtime` | 先看退出码或 error，再看 stdout 内的 torch/CUDA 信息；脚本成功不能替代这项成功 |
+| `nvidia_smi` | 区分工具缺失、工具报错与成功输出，不用它单独决定后续 Python 的设备 |
+| `nanochat_base_dir` | 记录环境变量或默认说明；它还不是资源完整性检查 |
+
+如果看到 `cuda_build=null`、`cuda_available=false`，同时 torch 子进程退出 0，说明导入成功，但这份构建没有 CUDA 支持；结合本机记录中的 `2.9.1+cpu`，可确认当前使用 CPU 分发。单凭没有 CUDA 不能推断物理机器无 GPU，也不能判断其他平台加速能力。D3 可沿 CPU 主线继续，不需要把 GPU 另列为未完成任务。若 torch 导入失败，则先定位这个具体故障，仍可完成本日概念学习。
+
+### 3.3 实际操作：补上计算类型与资源位置
+
+仅在 torch 导入成功后执行第一条。它读取 common 的实际常量；第二条用标准库计算候选目录，避免为了查位置调用会创建目录的 `get_base_dir()`。
+
+```bash
+{
+python -c 'from nanochat.common import COMPUTE_DTYPE, COMPUTE_DTYPE_REASON; print(COMPUTE_DTYPE); print(COMPUTE_DTYPE_REASON)'
+d02_dtype_rc=$?; echo "dtype_exit_code=$d02_dtype_rc"
+python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_BASE_DIR") or str(Path.home()/".cache/nanochat")); print(p); print("exists:",p.exists())'
+d02_path_rc=$?; echo "path_exit_code=$d02_path_rc"
+} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
+```
+
+例如 `torch.float32` 配合 `auto-detected: no CUDA (CPU/MPS)` 解释了默认精度来源；若是 `set via NANOCHAT_DTYPE=...`，说明环境覆盖生效。输出根目录不存在并非“模型损坏”，只是这个位置当前未建资源目录；今天无需因此下载。
+
+## 4. 当天自验证与交流
+
+直接在聊天回答即可，命令、退出码与 JSON 路径共用一份。实际未执行的采集如实说明；不要求额外环境报告，也不为回答假设题制造故障。
+
+1. **为什么两次 import 不同**：沿第 1 节的两个 Python 例子说明，应先比较哪个输出？为什么包元数据可查仍可能导入失败？再用本次 JSON 判断 D3 是否可以开始 CPU 测试。
+
+   **核对要点**：把解释器、元数据和子进程导入分开；torch 导入成功还不等于模型测试通过。
+
+2. **解释 CUDA 的矛盾表象**：`nvidia-smi` 成功但 `cuda_available=false`，怎样用 `cuda_build` 区分 CPU 构建与需继续排查的 CUDA 构建？
+
+   **核对要点**：给出有先后次序的判断，不从单一输出推断物理机器无卡；假设题无需实际操作。
+
+3. **精度设置何时生效**：同样使用 CPU，为什么两次进程的 `COMPUTE_DTYPE` 仍可能不同？在导入后修改环境变量，已有常量会怎样？
+
+   **核对要点**：能从检测顺序和顶层赋值推导，解释本次实际精度的来源。
+
+4. **相同 commit 是否等于相同条件**：工作区有模型源码改动、资源根目录也换了，还能只用 commit 声称复现条件相同吗？哪些差异值得保留？
+
+   **核对要点**：分别说明源码与输入资源可能改变什么；目录存在不代表配套资源齐全。
+
+## 5. 脚本、产物与常见分流
+
+所有项目内路径相对 nanochat 根目录，以下是执行后的预期，不能据清单声称已经生成。
+
+| 脚本与输入 | 用途与条件 |
+|---|---|
+| [`.agents/docs/career_roadmap/w1/scripts/d02_inspect_environment.py`](scripts/d02_inspect_environment.py)；输入为当前解释器、包元数据、Git、环境变量与可见硬件命令 | 第 3 节采集；标准库启动，torch 在同解释器子进程导入，缺包或导入失败也记录；不安装依赖 |
+
+| 完整项目相对路径 | 用途与生成者 | 生成条件 |
 |---|---|---|
-| `git_head.stdout` | 当前提交标识 | 完整 commit；不要把分支名当不可变版本 |
-| `git_status.stdout` | 提交之外的工作区变化 | 哪些是原有改动、哪些是自己产物 |
-| `python`、`conda_prefix` | 真正执行脚本的环境 | 绝对路径 |
-| `packages` | 当前解释器可见的发行包版本 | 缺失写 N/A，不填预期版本 |
-| `torch_runtime.exit_code` | PyTorch 导入是否完成 | 0 才继续解读 stdout 的 JSON |
-| `cuda_build` | PyTorch 编译时绑定的 CUDA 版本 | `null` 表示 CPU 构建；与驱动版本分开 |
-| `cuda_available` | 该进程能否使用 CUDA | false 不能做 GPU 基准 |
-| `nvidia_smi` | 外部驱动工具的可见信息 | 缺命令与无 GPU 分开记录 |
+| `experiments/inference_infra/results/w1/d02_environment.json` | 盘点脚本写入原始事实 | 盘点正常写入后自动生成，重跑覆盖 |
+| `experiments/inference_infra/reports/d02_checks.log` | Bash 局部 `tee` 保存检查输出、错误与即时退出码 | 执行对应命令组后自动追加；精度/路径命令只打印，靠此日志保存 |
+| `experiments/inference_infra/d02_env.md` | 整理环境卡 | 可选人工编写，聊天回答可替代 |
 
-<abbr title="CUDA · NVIDIA GPU 的计算运行环境。PyTorch 是否编译了 CUDA、驱动是否可见、当前进程能否分配 GPU 张量是不同条件。CPU 版 PyTorch 即使运行在带卡机器上也不能进行 CUDA 计时。">CUDA</abbr> 可用性必须来自这次进程，不能依据买过显卡或主机型号判断。`nvidia-smi` 不在 PATH 也不能单独证明物理机器无卡。JSON 中的 `recorded_at` 是 UTC 时间戳，交流时的实际执行日期按本地 Asia/Shanghai 填写。
+| 现象 | 怎样继续 |
+|---|---|
+| Python 指向其他环境 | 先确认自动激活配置或使用正确完整解释器路径；不混用别的项目包 |
+| 包版本存在但导入失败 | 读 `torch_runtime.stderr` 或 `error`；按真实错误排查，不先重装整套环境 |
+| torch 未装完或缺失 | 保留盘点事实，模型操作等运行时就绪再开始；无需反复创建环境 |
+| 无 CUDA | 继续 CPU 主线；GPU 仅为自选扩展 |
+| 输出目录不可写 | 可传 `--output /tmp/nanochat_d02_environment.json` 临时诊断；要作为正式证据时另保存到实验目录并说明实际路径 |
 
-## 3. 核对项目依赖和数据根目录
+复建环境时再按[已记录的安装步骤](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)核对当前条件；本日不要求执行 `uv sync` 或重装可用环境。结束时应能根据实际事实解释“当前用什么运行、能继续哪一步、还缺哪项必要条件”，而不是仅展示一份长日志。
 
-```bash
-{
-sed -n '1,145p' pyproject.toml
-rg -n 'NANOCHAT_BASE_DIR|def get_base_dir|COMPUTE_DTYPE|NANOCHAT_DTYPE' nanochat/common.py
-rg -n 'get_base_dir|parquet' nanochat/dataset.py
-} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
-```
-
-当前 `pyproject.toml` 要求 Python ≥3.10，固定 `torch==2.9.1`，CPU 与 GPU extra 互斥；dev 组包含 pytest。<abbr title="extra · Python 项目可选依赖集合；cpu/gpu 用于选择对应的 torch 分发。dev group 则提供测试等开发工具。二者用途不同，不能把激活 Conda 视为已经安装这些依赖。">extra 与依赖组</abbr> 是安装选择，不是机器能力探测。
-
-本教程已有环境优先复用。依赖尚未安装完就写 `INSTALLING`，等安装结束后重跑盘点再更新版本。若将来需要复建，先核对本机 uv 对参数的支持：
-
-```bash
-{
-uv pip install --help
-uv export --help
-} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
-```
-
-已核对当前 uv 支持 `uv pip install --python` 与 `--group`。涉及 CPU/GPU 源和锁文件的复建，请按[环境记录中的实际安装步骤](../../project-maintenance/nanochat-conda-environment-2026-10-15.md)逐条执行；不能仅凭 `pip install torch` 猜中 2.9.1 CPU 轮子，也不能把 CPU 与 GPU 两套依赖同时装进环境。今天没有必要重装一个已经可用的环境。
-
-`get_base_dir()` 默认使用 `~/.cache/nanochat`，可由 `NANOCHAT_BASE_DIR` 指定。只读盘点当前值：
-
-```bash
-{
-python -c 'import os; from pathlib import Path; p=Path(os.environ.get("NANOCHAT_BASE_DIR", str(Path.home()/".cache/nanochat"))); print(p); print("exists:",p.exists())'
-} > >(tee -a experiments/inference_infra/reports/d02_checks.log) 2>&1
-```
-
-不要今天就批量下载数据。交流时只需说明 tokenizer、parquet 语料、checkpoint 的候选根路径；是否完整由 W2 专门核查。大文件存储位置与自动结果、可选记录的位置分开，`/tmp` 用于缓存和临时验证，不适合保存唯一 checkpoint。
-
-## 4. 当天自验证与交流问题
-
-按题号在聊天中回答即可，无需写报告。概念题说明理由或推导；实测题引用当天日志或 JSON 中支撑结论的片段，运行命令、退出码和证据路径提供一次即可。未执行的实测项标 `PENDING`；引用历史结果时注明日期与版本，不必为回答问题额外重跑实验。
-
-1. **环境能否支撑下一步**：用本次环境 JSON 判断：D3 的 CPU 测试现在能否启动？如果不能，最先要解决的具体条件是什么？
-
-   **核对要点**：判断依据来自实际解释器、依赖约束与导入结果；包元数据存在、Conda 已激活和脚本退出0分别不能替代哪些检查，要能说清。
-
-2. **CUDA 证据如何解读**：假设 nvidia-smi 能看到显卡，但 torch.cuda.is_available() 为 false，你会如何区分 CPU 版 PyTorch、驱动/运行环境问题与“机器没有 GPU”？
-
-   **核对要点**：结合 cuda_build、当前进程可用性及驱动信息提出有顺序的排查，说明本次环境属于哪种情况；不要求实际制造故障。
-
-3. **精度由谁决定**：设备类型相同是否意味着计算精度也相同？在导入 nanochat 前设置 NANOCHAT_DTYPE 与导入后修改它，有什么区别？
-
-   **核对要点**：依据 common 的精度选择顺序和模块常量初始化解释；不由设备或包版本直接推断实际 compute dtype。
-
-4. **同一 commit 是否可复现**：两次记录的 HEAD 相同，但一次有源码未提交修改、数据根目录也不同，能否视为同一实验环境？应保留哪些差异才能继续比较？
-
-   **核对要点**：说明源码差异和 NANOCHAT_BASE_DIR 分别影响什么；能恢复相关条件，且不把目录存在当作 tokenizer/checkpoint 已齐备。
-
-<abbr title="dirty worktree · Git 工作区包含尚未提交的改动。记录它是为了说明实际执行源码可能不只由 commit 决定，不表示应清空这些改动。">dirty 状态</abbr> 需要可追溯；只写一个 commit 而隐藏源码改动会让后续性能对比无法复现。
-
-## 5. 失败分流与验收
-
-- Python 不对：先检查终端自动激活配置，确认解释器路径正确后再执行脚本，不继续拿其他项目环境的数据填卡。
-- 包元数据显示版本，导入却失败：读 `torch_runtime.stderr`，这是动态库或安装完整性问题，不能判为可运行。
-- torch 缺失：等依赖安装完成或记录 BLOCKED；标准库盘点仍算完成，模型验收仍未完成。
-- 无 CUDA：交流时说明 CPU 路线可继续，GPU 项 `PENDING_GPU`；明天执行 CPU 测试。
-- 输出目录不可写：可先传 `--output /tmp/nanochat_d02_environment.json` 验证脚本，正式证据最终迁回实验目录并登记实际路径。
-
-结束时核对解释器、commit/dirty、实际版本、驱动与 CUDA runtime 的区别和缺项原因；交流附原始 JSON 路径与实际日期、命令、状态及 D3 待办，无需另写环境卡，用时可选。
-
-上一篇：[D1 起点复核](d01_starting_point.md)。下一篇：[D3 推理测试](d03_inference_smoke.md)。
+上一篇：[D1 项目全景与起点](d01_starting_point.md)。下一篇：[D3 推理测试](d03_inference_smoke.md)。
